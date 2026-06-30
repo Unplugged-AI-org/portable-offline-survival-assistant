@@ -1,0 +1,26 @@
+# Android / Gradle
+.gradle/
+build/
+**/build/
+local.properties
+
+# IDE
+.idea/
+*.iml
+
+# Kotlin / Java
+*.class
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
+
+# Generated archives
+*.apk
+*.aab
+
+# Local test data
+tmp/
+*.map.tmp
