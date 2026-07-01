@@ -11,7 +11,7 @@ Prompt:
 ```text
 Read README.md, ROADMAP.md, docs/architecture.md, docs/safety-policy.md, docs/content-guidelines.md, docs/map-data-strategy.md, and docs/pack-schema.md.
 
-Complete Phase 0 only. Do not create Android app code yet unless asked. Improve docs, issue templates, and public roadmap so the repository is ready to publish as UnpluggedAI/portable-offline-survival-assistant.
+Complete Phase 0 only. Do not create Android app code yet unless asked. Improve docs, issue templates, and public roadmap so the repository is ready to publish as Unplugged-AI-org/portable-offline-survival-assistant.
 ```
 
 ## Session 1: Android Skeleton

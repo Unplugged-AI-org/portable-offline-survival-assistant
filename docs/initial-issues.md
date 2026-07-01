@@ -1,6 +1,6 @@
 # Initial GitHub Issues
 
-These issues can be created after the GitHub repo exists at `UnpluggedAI/portable-offline-survival-assistant`.
+These issues can be created after the GitHub repo exists at `Unplugged-AI-org/portable-offline-survival-assistant`.
 
 ## Phase 0
 
