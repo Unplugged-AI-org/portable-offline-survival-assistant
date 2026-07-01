@@ -33,14 +33,14 @@ class PosaDatabaseMigrationTest {
     }
 
     @Test
-    fun migrationFromOneToTwoPreservesExistingDataAndAddsInstalledMaps() = runTest {
+    fun migrationFromOneToThreePreservesExistingDataAndAddsInstalledMapViewportColumns() = runTest {
         createVersionOneDatabase()
 
         val database = Room.databaseBuilder(
             context,
             PosaDatabase::class.java,
             TEST_DATABASE_NAME,
-        ).addMigrations(PosaDatabase.MIGRATION_1_2).build()
+        ).addMigrations(PosaDatabase.MIGRATION_1_2, PosaDatabase.MIGRATION_2_3).build()
 
         try {
             val repositories = database.repositories()
@@ -53,6 +53,13 @@ class PosaDatabaseMigrationTest {
                 filePath = "/local/maps/local-area.map",
                 byteSize = 42_000L,
                 isEnabled = true,
+                centerLatitude = 39.7392,
+                centerLongitude = -104.9903,
+                startZoomLevel = 11,
+                boundingBoxMinLatitude = 39.5,
+                boundingBoxMinLongitude = -105.2,
+                boundingBoxMaxLatitude = 39.9,
+                boundingBoxMaxLongitude = -104.7,
                 importedAtEpochMillis = NOW,
                 updatedAtEpochMillis = NOW,
             )

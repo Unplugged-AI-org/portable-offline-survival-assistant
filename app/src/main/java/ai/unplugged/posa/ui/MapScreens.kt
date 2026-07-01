@@ -124,7 +124,7 @@ internal fun MapSection(
         MapStateBanners(state)
         MapsforgeMapSurface(
             activeInstalledMap = state.activeInstalledMap,
-            mapCenter = selectedWaypoint?.toFieldCoordinate() ?: MONACO_CENTER,
+            selectedWaypoint = selectedWaypoint,
         )
         InstalledMapPanel(
             state = state,
@@ -165,15 +165,21 @@ internal fun MapSection(
 @Composable
 private fun MapsforgeMapSurface(
     activeInstalledMap: InstalledMap?,
-    mapCenter: FieldCoordinate,
+    selectedWaypoint: Waypoint?,
 ) {
     val context = LocalContext.current
     var mapFile by remember { mutableStateOf<File?>(null) }
     var mapError by remember { mutableStateOf<String?>(null) }
+    var appliedViewportKey by remember { mutableStateOf<String?>(null) }
     val mapViewHolder = remember { mutableStateOf<MapView?>(null) }
+    val viewport = activeInstalledMap?.viewport() ?: MapViewport(
+        center = selectedWaypoint?.toFieldCoordinate() ?: MONACO_CENTER,
+        zoomLevel = DEFAULT_MAP_ZOOM,
+    )
 
     LaunchedEffect(context, activeInstalledMap?.id, activeInstalledMap?.filePath) {
         try {
+            appliedViewportKey = null
             val installedFile = activeInstalledMap?.let { File(it.filePath) }
             if (installedFile == null) {
                 mapFile = copyAssetToCache(context, MAP_ASSET_PATH)
@@ -232,12 +238,15 @@ private fun MapsforgeMapSurface(
                                 mapScaleBar.isVisible = true
                                 setBuiltInZoomControls(true)
                                 addMapLayer(viewContext, localMapFile)
-                                setCenter(LatLong(mapCenter.latitude, mapCenter.longitude))
-                                setZoomLevel(14)
+                                moveTo(viewport)
+                                appliedViewportKey = viewport.key
                             }
                         },
                         update = { mapView ->
-                            mapView.setCenter(LatLong(mapCenter.latitude, mapCenter.longitude))
+                            if (appliedViewportKey != viewport.key) {
+                                mapView.moveTo(viewport)
+                                appliedViewportKey = viewport.key
+                            }
                         },
                     )
                 }
@@ -790,6 +799,40 @@ private fun MapView.addMapLayer(context: Context, mapFile: File) {
     layerManager.layers.add(tileRendererLayer)
 }
 
+private fun MapView.moveTo(viewport: MapViewport) {
+    setCenter(LatLong(viewport.center.latitude, viewport.center.longitude))
+    setZoomLevel(viewport.zoomLevel.toByte())
+}
+
+private fun InstalledMap.viewport(): MapViewport? {
+    val center = when {
+        centerLatitude != null && centerLongitude != null -> FieldCoordinate(
+            latitude = centerLatitude,
+            longitude = centerLongitude,
+        )
+        boundingBoxMinLatitude != null &&
+            boundingBoxMinLongitude != null &&
+            boundingBoxMaxLatitude != null &&
+            boundingBoxMaxLongitude != null -> FieldCoordinate(
+                latitude = (boundingBoxMinLatitude + boundingBoxMaxLatitude) / 2.0,
+                longitude = (boundingBoxMinLongitude + boundingBoxMaxLongitude) / 2.0,
+            )
+        else -> null
+    } ?: return null
+
+    return MapViewport(
+        center = center,
+        zoomLevel = startZoomLevel?.coerceIn(MIN_MAP_ZOOM, MAX_MAP_ZOOM) ?: DEFAULT_INSTALLED_MAP_ZOOM,
+    )
+}
+
+private data class MapViewport(
+    val center: FieldCoordinate,
+    val zoomLevel: Int,
+) {
+    val key: String = "${center.latitude}:${center.longitude}:$zoomLevel"
+}
+
 private fun copyAssetToCache(context: Context, assetPath: String): File {
     val file = File(context.cacheDir, assetPath.substringAfterLast('/'))
     context.assets.open(assetPath).use { input ->
@@ -851,10 +894,14 @@ private fun formatByteSize(bytes: Long): String =
         else -> "$bytes B"
     }
 
-private val MONACO_CENTER = FieldCoordinate(latitude = 43.7384, longitude = 7.4246)
 private const val MAP_ASSET_PATH = "maps/monaco.map"
+private const val MIN_MAP_ZOOM = 0
+private const val MAX_MAP_ZOOM = 22
+private const val DEFAULT_MAP_ZOOM = 14
+private const val DEFAULT_INSTALLED_MAP_ZOOM = 12
 private const val LOCATION_UPDATE_INTERVAL_MILLIS = 10_000L
 private const val LOCATION_UPDATE_DISTANCE_METERS = 10f
+private val MONACO_CENTER = FieldCoordinate(latitude = 43.7384, longitude = 7.4246)
 
 private val MAP_DATE_TIME_FORMATTER: DateTimeFormatter =
     DateTimeFormatter.ofPattern("MMM d, yyyy h:mm a")

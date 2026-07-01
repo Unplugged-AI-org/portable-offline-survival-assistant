@@ -144,12 +144,36 @@ fun PosaApp(database: PosaDatabase? = null) {
                     uri = uri,
                     id = newLocalId("map-area"),
                 )
-                localDatabase.repositories().installedMaps.save(importedMap)
+                val installedMaps = localDatabase.repositories().installedMaps
+                installedMaps.list()
+                    .filter { it.isEnabled }
+                    .forEach { enabledMap ->
+                        installedMaps.save(
+                            enabledMap.copy(
+                                isEnabled = false,
+                                updatedAtEpochMillis = System.currentTimeMillis(),
+                            ),
+                        )
+                    }
+                installedMaps.save(importedMap)
             }
         },
         onSetInstalledMapEnabled = { installedMap, isEnabled ->
             runMapMutation { localDatabase ->
-                localDatabase.repositories().installedMaps.save(
+                val installedMaps = localDatabase.repositories().installedMaps
+                if (isEnabled) {
+                    installedMaps.list()
+                        .filter { it.id != installedMap.id && it.isEnabled }
+                        .forEach { enabledMap ->
+                            installedMaps.save(
+                                enabledMap.copy(
+                                    isEnabled = false,
+                                    updatedAtEpochMillis = System.currentTimeMillis(),
+                                ),
+                            )
+                        }
+                }
+                installedMaps.save(
                     installedMap.copy(
                         isEnabled = isEnabled,
                         updatedAtEpochMillis = System.currentTimeMillis(),

@@ -41,7 +41,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         GuideCardEntity::class,
         ProvenanceEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 abstract class PosaDatabase : RoomDatabase() {
@@ -63,7 +63,7 @@ abstract class PosaDatabase : RoomDatabase() {
                 context.applicationContext,
                 PosaDatabase::class.java,
                 DATABASE_NAME,
-            ).addMigrations(MIGRATION_1_2).build()
+            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
 
         fun createInMemory(context: Context): PosaDatabase =
             Room.inMemoryDatabaseBuilder(
@@ -96,6 +96,18 @@ abstract class PosaDatabase : RoomDatabase() {
                     ON `installed_maps` (`imported_at_epoch_millis`)
                     """.trimIndent(),
                 )
+            }
+        }
+
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `installed_maps` ADD COLUMN `center_latitude` REAL")
+                db.execSQL("ALTER TABLE `installed_maps` ADD COLUMN `center_longitude` REAL")
+                db.execSQL("ALTER TABLE `installed_maps` ADD COLUMN `start_zoom_level` INTEGER")
+                db.execSQL("ALTER TABLE `installed_maps` ADD COLUMN `bounding_box_min_latitude` REAL")
+                db.execSQL("ALTER TABLE `installed_maps` ADD COLUMN `bounding_box_min_longitude` REAL")
+                db.execSQL("ALTER TABLE `installed_maps` ADD COLUMN `bounding_box_max_latitude` REAL")
+                db.execSQL("ALTER TABLE `installed_maps` ADD COLUMN `bounding_box_max_longitude` REAL")
             }
         }
     }

@@ -37,6 +37,13 @@ data class InstalledMap(
     val filePath: String,
     val byteSize: Long,
     val isEnabled: Boolean,
+    val centerLatitude: Double?,
+    val centerLongitude: Double?,
+    val startZoomLevel: Int?,
+    val boundingBoxMinLatitude: Double?,
+    val boundingBoxMinLongitude: Double?,
+    val boundingBoxMaxLatitude: Double?,
+    val boundingBoxMaxLongitude: Double?,
     val importedAtEpochMillis: Long,
     val updatedAtEpochMillis: Long,
 )

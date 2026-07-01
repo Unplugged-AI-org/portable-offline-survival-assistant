@@ -41,30 +41,51 @@ object InstalledMapImporter {
             require(destination.length() > 0L) {
                 "Selected map file is empty."
             }
-            validateMapsforgeFile(destination)
+            val viewport = extractViewport(destination)
+            return InstalledMap(
+                id = id,
+                displayName = displayName.withoutMapExtension().ifBlank { sanitizedName },
+                fileName = sanitizedName,
+                filePath = destination.absolutePath,
+                byteSize = destination.length(),
+                isEnabled = true,
+                centerLatitude = viewport.centerLatitude,
+                centerLongitude = viewport.centerLongitude,
+                startZoomLevel = viewport.startZoomLevel,
+                boundingBoxMinLatitude = viewport.boundingBoxMinLatitude,
+                boundingBoxMinLongitude = viewport.boundingBoxMinLongitude,
+                boundingBoxMaxLatitude = viewport.boundingBoxMaxLatitude,
+                boundingBoxMaxLongitude = viewport.boundingBoxMaxLongitude,
+                importedAtEpochMillis = nowEpochMillis,
+                updatedAtEpochMillis = nowEpochMillis,
+            )
         } catch (exception: Exception) {
             destination.delete()
             throw exception
         }
-
-        return InstalledMap(
-            id = id,
-            displayName = displayName.withoutMapExtension().ifBlank { sanitizedName },
-            fileName = sanitizedName,
-            filePath = destination.absolutePath,
-            byteSize = destination.length(),
-            isEnabled = true,
-            importedAtEpochMillis = nowEpochMillis,
-            updatedAtEpochMillis = nowEpochMillis,
-        )
     }
 
-    private fun validateMapsforgeFile(file: File) {
+    internal fun extractViewport(file: File): InstalledMapViewport {
+        var mapFile: MapFile? = null
         try {
-            val mapFile = MapFile(FileInputStream(file))
-            mapFile.close()
+            mapFile = MapFile(FileInputStream(file))
+            val startPosition = mapFile.startPosition()
+            val boundingBox = mapFile.boundingBox()
+            val boundingBoxCenter = boundingBox.getCenterPoint()
+            val center = startPosition ?: boundingBoxCenter
+            return InstalledMapViewport(
+                centerLatitude = center.latitude,
+                centerLongitude = center.longitude,
+                startZoomLevel = mapFile.startZoomLevel()?.toInt(),
+                boundingBoxMinLatitude = boundingBox.minLatitude,
+                boundingBoxMinLongitude = boundingBox.minLongitude,
+                boundingBoxMaxLatitude = boundingBox.maxLatitude,
+                boundingBoxMaxLongitude = boundingBox.maxLongitude,
+            )
         } catch (exception: Exception) {
             throw IllegalArgumentException("Selected file is not a readable Mapsforge map.", exception)
+        } finally {
+            mapFile?.close()
         }
     }
 
@@ -99,3 +120,13 @@ object InstalledMapImporter {
             this
         }
 }
+
+data class InstalledMapViewport(
+    val centerLatitude: Double,
+    val centerLongitude: Double,
+    val startZoomLevel: Int?,
+    val boundingBoxMinLatitude: Double,
+    val boundingBoxMinLongitude: Double,
+    val boundingBoxMaxLatitude: Double,
+    val boundingBoxMaxLongitude: Double,
+)

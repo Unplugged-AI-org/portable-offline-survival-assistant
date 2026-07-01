@@ -25,8 +25,9 @@ Phase 6 implements:
 
 - Android file picker import for supported Mapsforge `.map` files.
 - Local copy into app-private storage so imported areas remain available offline.
-- Installed map metadata in Room.
-- Enable/disable controls for installed map areas.
+- Installed map metadata in Room, including Mapsforge start position, optional start zoom, and bounding box-derived viewport data.
+- Enable/disable controls for installed map areas. Importing or enabling a map makes it the active offline area and disables other installed maps.
+- Automatic viewport focus for the active installed map on import, enable, and app restart. The bundled Monaco fixture is used only when no installed map is enabled.
 - Clear errors for unsupported, unreadable, empty, or missing files.
 
 ## Out Of Scope For v0

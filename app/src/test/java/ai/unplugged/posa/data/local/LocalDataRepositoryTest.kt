@@ -73,6 +73,13 @@ class LocalDataRepositoryTest {
             filePath = "/local/maps/local-area.map",
             byteSize = 42_000L,
             isEnabled = true,
+            centerLatitude = 39.7392,
+            centerLongitude = -104.9903,
+            startZoomLevel = 11,
+            boundingBoxMinLatitude = 39.5,
+            boundingBoxMinLongitude = -105.2,
+            boundingBoxMaxLatitude = 39.9,
+            boundingBoxMaxLongitude = -104.7,
             importedAtEpochMillis = NOW,
             updatedAtEpochMillis = NOW,
         )

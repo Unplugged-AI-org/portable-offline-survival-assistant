@@ -80,6 +80,13 @@ data class InstalledMapEntity(
     @ColumnInfo(name = "file_path") val filePath: String,
     @ColumnInfo(name = "byte_size") val byteSize: Long,
     @ColumnInfo(name = "is_enabled") val isEnabled: Boolean,
+    @ColumnInfo(name = "center_latitude") val centerLatitude: Double?,
+    @ColumnInfo(name = "center_longitude") val centerLongitude: Double?,
+    @ColumnInfo(name = "start_zoom_level") val startZoomLevel: Int?,
+    @ColumnInfo(name = "bounding_box_min_latitude") val boundingBoxMinLatitude: Double?,
+    @ColumnInfo(name = "bounding_box_min_longitude") val boundingBoxMinLongitude: Double?,
+    @ColumnInfo(name = "bounding_box_max_latitude") val boundingBoxMaxLatitude: Double?,
+    @ColumnInfo(name = "bounding_box_max_longitude") val boundingBoxMaxLongitude: Double?,
     @ColumnInfo(name = "imported_at_epoch_millis") val importedAtEpochMillis: Long,
     @ColumnInfo(name = "updated_at_epoch_millis") val updatedAtEpochMillis: Long,
 )
