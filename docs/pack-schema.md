@@ -26,7 +26,7 @@ packs/
       battery.md
 ```
 
-## Manifest Draft
+## Manifest v0
 
 ```json
 {
@@ -34,13 +34,13 @@ packs/
   "title": "Wilderness Basics",
   "version": "0.1.0",
   "category": "wilderness",
-  "description": "Basic offline wilderness survival guidance.",
+  "description": "Starter offline guide cards for conservative wilderness preparation.",
   "pack_type": "official",
-  "license": "NOASSERTION",
-  "source_name": "Draft placeholder - source not selected",
-  "source_url": "",
+  "license": "U.S. federal government source synthesis; verify third-party notices on source pages",
+  "source_name": "National Park Service; USDA Forest Service",
+  "source_url": "https://www.nps.gov/articles/10essentials.htm",
   "author": "Unplugged AI",
-  "last_reviewed": "2026-06-30",
+  "last_reviewed": "2026-07-01",
   "review_status": "draft",
   "files": [
     "cards/water.md",
@@ -53,6 +53,34 @@ packs/
 }
 ```
 
+## Markdown Card Front Matter
+
+Guide cards are Markdown files with required YAML-style front matter followed by body Markdown:
+
+```markdown
+---
+id: water
+title: Water Planning
+category: water
+summary: Plan water before walking and carry a treatment method you already know how to use.
+warnings: Natural water can contain hazards that are not visible.
+source_title: National Park Service - Ten Essentials
+source_url: https://www.nps.gov/articles/10essentials.htm
+citation: National Park Service. Ten Essentials. Last updated May 28, 2026.
+license: U.S. government work; public domain unless otherwise noted by the source
+review_status: draft
+reviewed_by: Unplugged AI content draft
+reviewed_at: 2026-07-01
+notes: POSA draft synthesis. Not medical advice.
+sort_order: 10
+---
+## Field Use
+
+- Identify likely water sources before travel and confirm whether they are seasonal.
+```
+
+The app stores card IDs as `pack_id:card_id` so separate packs can use short local card IDs without colliding.
+
 ## Guide Card Metadata
 
 Each guide card should support:
@@ -60,7 +88,7 @@ Each guide card should support:
 - Title.
 - Category.
 - Summary.
-- Steps.
+- Body Markdown.
 - Warnings.
 - Source title.
 - Source URL or publication reference.

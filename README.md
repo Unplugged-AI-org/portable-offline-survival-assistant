@@ -8,9 +8,9 @@ The goal is not to build a generic survival chatbot. POSA should feel like a fie
 
 ## Status
 
-This repository is at Phase 0: public planning and architecture.
+This repository is at Phase 3: packs and guide cards.
 
-No production Android app is implemented yet. The current work is defining the roadmap, safety boundaries, content model, map strategy, and session-by-session build plan.
+A native Kotlin Android app shell is present under `app/`. It launches POSA with four top-level Compose tabs: Map, Tools, Guide, and Packs. Room-backed local storage covers waypoints, breadcrumbs, field notes, checklists, gear/tools, packs, guide cards, and provenance metadata. A bundled starter guide pack now installs from local app assets, parses a pack manifest plus Markdown card front matter, shows source/provenance metadata, and supports local keyword search. Mapsforge rendering, AI, accounts, analytics, and downloads are intentionally deferred to later roadmap phases.
 
 ## Current Product Decisions
 
@@ -62,6 +62,45 @@ Start with:
 - [docs/content-guidelines.md](docs/content-guidelines.md)
 - [docs/safety-policy.md](docs/safety-policy.md)
 - [docs/build-in-public.md](docs/build-in-public.md)
+- [docs/release-notes.md](docs/release-notes.md)
+
+## Run The Android Shell
+
+Prerequisites:
+
+- Android Studio or a local JDK 17+.
+- Android SDK platform 36.
+
+If Java or the Android SDK is not on your shell path, point Gradle at the Android Studio toolchain first:
+
+```sh
+export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+export ANDROID_HOME="$HOME/Library/Android/sdk"
+```
+
+From the repository root:
+
+```sh
+./gradlew :app:assembleDebug
+```
+
+Then open the project in Android Studio or install `app/build/outputs/apk/debug/app-debug.apk` on an Android device or emulator.
+
+Run local JVM tests, including the Room repository CRUD and bundled pack loader/search coverage:
+
+```sh
+./gradlew :app:testDebugUnitTest
+```
+
+## Local Data Foundation
+
+Phase 2 adds a Room database named `posa.db`, repository interfaces, Room repository implementations, and an explicit development seed path at `PosaDevelopmentSeed`. The seed data is fixture-only and marked as draft placeholder content; it is not user-facing survival guidance.
+
+Room schema export is temporarily disabled because Room 2.8.4's KSP schema exporter currently hits a `kotlinx.serialization` `AbstractMethodError` when deserializing exported schema JSON during clean builds. Re-enable schema export after the Room/KSP dependency issue is resolved.
+
+## Packs And Guide Cards
+
+Phase 3 adds a bundled official draft pack at `app/src/main/assets/packs/wilderness-basics`. The local installer lives at `app/src/main/java/ai/unplugged/posa/data/pack/BundledPackInstaller.kt`, and the data-backed Guide/Packs UI lives at `app/src/main/java/ai/unplugged/posa/ui/GuideScreens.kt`. The app installs that pack locally on startup, loads six guide cards, stores per-card provenance, and renders Guide and Packs tabs from the local database. The guide content is draft source-aware synthesis and does not include medical treatment guidance.
 
 ## Safety Note
 

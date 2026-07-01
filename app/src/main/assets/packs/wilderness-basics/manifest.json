@@ -1,0 +1,22 @@
+{
+  "id": "wilderness-basics",
+  "title": "Wilderness Basics",
+  "version": "0.1.0",
+  "category": "wilderness",
+  "description": "Starter offline guide cards for conservative wilderness preparation.",
+  "pack_type": "official",
+  "license": "U.S. federal government source synthesis; verify third-party notices on source pages",
+  "source_name": "National Park Service; USDA Forest Service",
+  "source_url": "https://www.nps.gov/articles/10essentials.htm",
+  "author": "Unplugged AI",
+  "last_reviewed": "2026-07-01",
+  "review_status": "draft",
+  "files": [
+    "cards/water.md",
+    "cards/fire.md",
+    "cards/shelter.md",
+    "cards/navigation.md",
+    "cards/signaling.md",
+    "cards/battery.md"
+  ]
+}
