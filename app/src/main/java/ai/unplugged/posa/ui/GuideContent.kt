@@ -11,6 +11,7 @@ internal data class GuideContentState(
     val errorMessage: String? = null,
     val packs: List<Pack> = emptyList(),
     val packCardCounts: Map<String, Int> = emptyMap(),
+    val allCards: List<GuideCardItem> = emptyList(),
     val cards: List<GuideCardItem> = emptyList(),
 )
 
@@ -35,9 +36,26 @@ internal suspend fun loadGuideContent(
         repositories.guideCards.search(query)
     }
 
+    val allCardItems = allCards
+        .map { card ->
+            GuideCardItem(
+                card = card,
+                pack = packById[card.packId],
+                provenance = card.provenanceId?.let { provenanceById[it] },
+            )
+        }
+        .sortedWith(
+            compareBy<GuideCardItem>(
+                { it.card.category.lowercase() },
+                { it.card.sortOrder },
+                { it.card.title.lowercase() },
+            ),
+        )
+
     return GuideContentState(
         packs = packs,
         packCardCounts = allCards.groupingBy { it.packId }.eachCount(),
+        allCards = allCardItems,
         cards = cards
             .map { card ->
                 GuideCardItem(

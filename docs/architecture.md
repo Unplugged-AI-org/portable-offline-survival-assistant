@@ -30,6 +30,8 @@ Content system:
 - Guide card loader.
 - Search index.
 - Provenance display.
+- Guided workflow composer over source cards, checklist items, gear inventory, and saved map context.
+- Source-grounded retrieval over installed packs with cited excerpts, confidence scoring, gear/map context, and "I do not know from installed sources" fallback.
 
 Map system:
 

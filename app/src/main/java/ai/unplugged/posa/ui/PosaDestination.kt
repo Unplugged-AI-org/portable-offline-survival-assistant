@@ -31,9 +31,9 @@ enum class PosaDestination(
     ),
     Guide(
         label = "Guide",
-        headline = "Source-aware guide",
-        summary = "Guide cards load from installed offline content packs and keep source details visible.",
-        offlineState = "Bundled guide cards are installed from local app assets; no generated survival or medical advice is included.",
+        headline = "Source-grounded guide",
+        summary = "Ask installed packs or run non-AI workflows for water, navigation, shelter, fire, signaling, and battery conservation.",
+        offlineState = "Questions and workflows use installed guide cards, local checklists, gear inventory, and saved map context; no generated survival or medical advice is included.",
         nextSteps = listOf(
             "Replace draft cards with reviewed release-ready content.",
             "Expand pack validation before user imports are supported.",

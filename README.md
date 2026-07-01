@@ -8,9 +8,9 @@ The goal is not to build a generic survival chatbot. POSA should feel like a fie
 
 ## Status
 
-This repository is at Phase 6: user-loaded map areas.
+This repository is at Phase 8: retrieval and RAG v1.
 
-A native Kotlin Android app shell is present under `app/`. It launches POSA with four top-level Compose tabs: Map, Tools, Guide, and Packs. Room-backed local storage covers waypoints, breadcrumbs, field notes, checklists, gear/tools, packs, guide cards, and provenance metadata. A bundled starter guide pack installs from local app assets, parses a pack manifest plus Markdown card front matter, shows source/provenance metadata, and supports local keyword search. The Tools tab supports local starter survival checklists, editable user checklists and checklist items, gear/tool inventory with have/missing state, and timestamped local field notes with optional location, waypoint, checklist, guide-card, and gear links. The Map tab now embeds Mapsforge, renders a tiny bundled local Monaco test map fixture, requests Android location permission, displays current coordinates, saves current-location waypoints, shows waypoint details with distance and bearing, and records local breadcrumb trails. AI, accounts, analytics, sync, routing, and map downloads are intentionally deferred to later roadmap phases.
+A native Kotlin Android app shell is present under `app/`. It launches POSA with four top-level Compose tabs: Map, Tools, Guide, and Packs. Room-backed local storage covers waypoints, breadcrumbs, field notes, checklists, gear/tools, packs, guide cards, and provenance metadata. A bundled starter guide pack installs from local app assets, parses a pack manifest plus Markdown card front matter, shows source/provenance metadata, and supports local keyword search. The Guide tab now includes an "Ask" retrieval mode that searches installed guide packs, returns cited source-card excerpts with confidence and provenance, folds in matching gear and saved map context, and responds "I do not know from installed sources" without generating unsupported medical or survival claims. The Guide tab also includes non-AI guided workflows for water, lost, shelter, fire, signaling, and battery conservation; workflow output is composed from installed guide cards, local checklist steps, gear inventory, and saved map context with missing-data warnings. The Tools tab supports local starter survival checklists, editable user checklists and checklist items, gear/tool inventory with have/missing state, and timestamped local field notes with optional location, waypoint, checklist, guide-card, and gear links. The Map tab embeds Mapsforge, renders a tiny bundled local Monaco test map fixture, imports supported user-selected Mapsforge `.map` files, requests Android location permission, displays current coordinates, saves current-location waypoints, shows waypoint details with distance and bearing, and records local breadcrumb trails. AI, accounts, analytics, sync, routing, and map downloads are intentionally deferred to later roadmap phases.
 
 ## Current Product Decisions
 
@@ -113,6 +113,14 @@ Phase 5 adds a data-backed Map tab using Mapsforge. POSA bundles `app/src/main/a
 Phase 6 adds user-loaded map areas. The Map tab can import Mapsforge `.map` files through Android's storage picker, validates that the selected file is readable by Mapsforge, copies it into app-private storage, stores installed map metadata locally, and lets users enable, disable, or delete installed areas. Enabled user maps render offline without network access; when no user map is enabled, the tiny bundled Monaco fixture remains available for renderer checks.
 
 Supported development/test map files can come from the Mapsforge public download index, such as `https://download.mapsforge.org/maps/v5/`. Use small regional files for testing. Do not bulk-download map tiles from public OpenStreetMap tile servers, and do not bundle large production map datasets in the base app. Routing, bulk map downloads, cloud sync, accounts, analytics, and AI generation remain intentionally unimplemented.
+
+## Guided Workflows
+
+Phase 7 adds deterministic guided workflows inside the Guide tab. Users can select water, lost, shelter, fire, signaling, or battery workflows. Each workflow shows source-backed bullets from installed guide cards, matching checklist steps, matching gear inventory with have/missing state, saved map context such as enabled map areas, waypoints, and active breadcrumbs, plus clear warnings when a local data category is missing. These workflows do not generate new survival advice and keep source links visible.
+
+## Retrieval and RAG v1
+
+Phase 8 adds source-grounded retrieval before any optional model generation. The Guide tab's "Ask" mode lets users type a question and search across installed guide packs. Results are ranked cited source-card excerpts, each shown with a confidence level and full provenance (source, citation, URL, review status). Where relevant, retrieval also surfaces matching gear inventory (have/missing) and saved map context (enabled map areas, waypoints, active breadcrumbs). When no installed source matches, POSA answers "I do not know from installed sources" rather than generating an unsupported claim. No generated medical treatment advice is produced; only installed-source excerpts are shown.
 
 ## Safety Note
 
