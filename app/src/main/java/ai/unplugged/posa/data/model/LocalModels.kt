@@ -30,6 +30,17 @@ data class BreadcrumbPoint(
     val sequenceNumber: Int,
 )
 
+data class InstalledMap(
+    val id: String,
+    val displayName: String,
+    val fileName: String,
+    val filePath: String,
+    val byteSize: Long,
+    val isEnabled: Boolean,
+    val importedAtEpochMillis: Long,
+    val updatedAtEpochMillis: Long,
+)
+
 data class FieldNote(
     val id: String,
     val title: String,

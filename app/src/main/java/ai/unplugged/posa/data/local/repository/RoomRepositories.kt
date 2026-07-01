@@ -6,6 +6,7 @@ import ai.unplugged.posa.data.local.dao.ChecklistDao
 import ai.unplugged.posa.data.local.dao.FieldNoteDao
 import ai.unplugged.posa.data.local.dao.GearDao
 import ai.unplugged.posa.data.local.dao.GuideCardDao
+import ai.unplugged.posa.data.local.dao.InstalledMapDao
 import ai.unplugged.posa.data.local.dao.PackDao
 import ai.unplugged.posa.data.local.dao.ProvenanceDao
 import ai.unplugged.posa.data.local.dao.WaypointDao
@@ -18,6 +19,7 @@ import ai.unplugged.posa.data.model.ChecklistItem
 import ai.unplugged.posa.data.model.FieldNote
 import ai.unplugged.posa.data.model.GearItem
 import ai.unplugged.posa.data.model.GuideCard
+import ai.unplugged.posa.data.model.InstalledMap
 import ai.unplugged.posa.data.model.Pack
 import ai.unplugged.posa.data.model.Provenance
 import ai.unplugged.posa.data.model.Waypoint
@@ -26,6 +28,7 @@ import ai.unplugged.posa.data.repository.ChecklistRepository
 import ai.unplugged.posa.data.repository.FieldNoteRepository
 import ai.unplugged.posa.data.repository.GearRepository
 import ai.unplugged.posa.data.repository.GuideCardRepository
+import ai.unplugged.posa.data.repository.InstalledMapRepository
 import ai.unplugged.posa.data.repository.PackRepository
 import ai.unplugged.posa.data.repository.ProvenanceRepository
 import ai.unplugged.posa.data.repository.WaypointRepository
@@ -33,6 +36,7 @@ import ai.unplugged.posa.data.repository.WaypointRepository
 data class RoomLocalRepositories(
     val waypoints: WaypointRepository,
     val breadcrumbs: BreadcrumbRepository,
+    val installedMaps: InstalledMapRepository,
     val fieldNotes: FieldNoteRepository,
     val checklists: ChecklistRepository,
     val gear: GearRepository,
@@ -44,6 +48,7 @@ data class RoomLocalRepositories(
 fun PosaDatabase.repositories(): RoomLocalRepositories = RoomLocalRepositories(
     waypoints = RoomWaypointRepository(waypointDao()),
     breadcrumbs = RoomBreadcrumbRepository(breadcrumbDao()),
+    installedMaps = RoomInstalledMapRepository(installedMapDao()),
     fieldNotes = RoomFieldNoteRepository(fieldNoteDao()),
     checklists = RoomChecklistRepository(checklistDao()),
     gear = RoomGearRepository(gearDao()),
@@ -94,6 +99,24 @@ class RoomBreadcrumbRepository(
 
     override suspend fun deletePoint(id: String) {
         dao.deletePoint(id)
+    }
+}
+
+class RoomInstalledMapRepository(
+    private val dao: InstalledMapDao,
+) : InstalledMapRepository {
+    override suspend fun save(map: InstalledMap) {
+        dao.upsert(map.toEntity())
+    }
+
+    override suspend fun get(id: String): InstalledMap? = dao.get(id)?.toModel()
+
+    override suspend fun list(): List<InstalledMap> = dao.list().map { it.toModel() }
+
+    override suspend fun listEnabled(): List<InstalledMap> = dao.listEnabled().map { it.toModel() }
+
+    override suspend fun delete(id: String) {
+        dao.delete(id)
     }
 }
 

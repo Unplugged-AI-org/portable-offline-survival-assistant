@@ -66,6 +66,25 @@ data class BreadcrumbPointEntity(
 )
 
 @Entity(
+    tableName = "installed_maps",
+    indices = [
+        Index(value = ["display_name"]),
+        Index(value = ["is_enabled"]),
+        Index(value = ["imported_at_epoch_millis"]),
+    ],
+)
+data class InstalledMapEntity(
+    @PrimaryKey val id: String,
+    @ColumnInfo(name = "display_name") val displayName: String,
+    @ColumnInfo(name = "file_name") val fileName: String,
+    @ColumnInfo(name = "file_path") val filePath: String,
+    @ColumnInfo(name = "byte_size") val byteSize: Long,
+    @ColumnInfo(name = "is_enabled") val isEnabled: Boolean,
+    @ColumnInfo(name = "imported_at_epoch_millis") val importedAtEpochMillis: Long,
+    @ColumnInfo(name = "updated_at_epoch_millis") val updatedAtEpochMillis: Long,
+)
+
+@Entity(
     tableName = "checklists",
     indices = [
         Index(value = ["title"]),

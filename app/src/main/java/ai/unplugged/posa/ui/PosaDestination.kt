@@ -10,23 +10,23 @@ enum class PosaDestination(
     Map(
         label = "Map",
         headline = "Offline map workspace",
-        summary = "Map rendering and GPS land in later phases; waypoint and breadcrumb storage is local-ready.",
-        offlineState = "No map downloads, network calls, or location permissions are active in this shell.",
+        summary = "Render a local Mapsforge test map, save waypoints, inspect distance and bearing, and record breadcrumb trails.",
+        offlineState = "The bundled test map renders from local assets. Location stays on-device, and no map downloads, routing, sync, accounts, telemetry, or AI generation is active.",
         nextSteps = listOf(
-            "Wire waypoint and breadcrumb repositories into the future map UI.",
-            "Reserve space for a local Mapsforge map view.",
-            "Keep OpenStreetMap attribution visible when map data is added.",
+            "Use Phase 6 to import user-selected Mapsforge map files.",
+            "Keep OpenStreetMap attribution visible wherever map data is shown.",
+            "Treat map data as field context, not survival-critical truth.",
         ),
     ),
     Tools(
         label = "Tools",
         headline = "Field tools",
-        summary = "Checklists, gear, field notes, and practical calculators will live here.",
-        offlineState = "Local storage models exist for user-owned tools data; no sync or telemetry is active.",
+        summary = "Create and edit local checklists, gear inventory, and timestamped field notes.",
+        offlineState = "Tools data is stored only in the local Room database; no sync, accounts, telemetry, or AI generation is active.",
         nextSteps = listOf(
-            "Add editable checklists, notes, and inventory in Phase 4.",
-            "Connect future screens to Room-backed repositories.",
-            "Avoid analytics, accounts, and cloud sync by default.",
+            "Use checklists for planning and gear status before later guided workflows read this context.",
+            "Link notes to saved map waypoints when location context matters.",
+            "Keep notes, checklist edits, and inventory changes local by default.",
         ),
     ),
     Guide(

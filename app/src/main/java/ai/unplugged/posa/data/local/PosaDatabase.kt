@@ -5,6 +5,7 @@ import ai.unplugged.posa.data.local.dao.ChecklistDao
 import ai.unplugged.posa.data.local.dao.FieldNoteDao
 import ai.unplugged.posa.data.local.dao.GearDao
 import ai.unplugged.posa.data.local.dao.GuideCardDao
+import ai.unplugged.posa.data.local.dao.InstalledMapDao
 import ai.unplugged.posa.data.local.dao.PackDao
 import ai.unplugged.posa.data.local.dao.ProvenanceDao
 import ai.unplugged.posa.data.local.dao.WaypointDao
@@ -15,6 +16,7 @@ import ai.unplugged.posa.data.local.entity.ChecklistItemEntity
 import ai.unplugged.posa.data.local.entity.FieldNoteEntity
 import ai.unplugged.posa.data.local.entity.GearItemEntity
 import ai.unplugged.posa.data.local.entity.GuideCardEntity
+import ai.unplugged.posa.data.local.entity.InstalledMapEntity
 import ai.unplugged.posa.data.local.entity.PackEntity
 import ai.unplugged.posa.data.local.entity.ProvenanceEntity
 import ai.unplugged.posa.data.local.entity.WaypointEntity
@@ -22,12 +24,15 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [
         WaypointEntity::class,
         BreadcrumbTrailEntity::class,
         BreadcrumbPointEntity::class,
+        InstalledMapEntity::class,
         FieldNoteEntity::class,
         ChecklistEntity::class,
         ChecklistItemEntity::class,
@@ -36,12 +41,13 @@ import androidx.room.RoomDatabase
         GuideCardEntity::class,
         ProvenanceEntity::class,
     ],
-    version = 1,
-    exportSchema = false,
+    version = 2,
+    exportSchema = true,
 )
 abstract class PosaDatabase : RoomDatabase() {
     abstract fun waypointDao(): WaypointDao
     abstract fun breadcrumbDao(): BreadcrumbDao
+    abstract fun installedMapDao(): InstalledMapDao
     abstract fun fieldNoteDao(): FieldNoteDao
     abstract fun checklistDao(): ChecklistDao
     abstract fun gearDao(): GearDao
@@ -57,12 +63,40 @@ abstract class PosaDatabase : RoomDatabase() {
                 context.applicationContext,
                 PosaDatabase::class.java,
                 DATABASE_NAME,
-            ).build()
+            ).addMigrations(MIGRATION_1_2).build()
 
         fun createInMemory(context: Context): PosaDatabase =
             Room.inMemoryDatabaseBuilder(
                 context.applicationContext,
                 PosaDatabase::class.java,
             ).build()
+
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `installed_maps` (
+                        `id` TEXT NOT NULL,
+                        `display_name` TEXT NOT NULL,
+                        `file_name` TEXT NOT NULL,
+                        `file_path` TEXT NOT NULL,
+                        `byte_size` INTEGER NOT NULL,
+                        `is_enabled` INTEGER NOT NULL,
+                        `imported_at_epoch_millis` INTEGER NOT NULL,
+                        `updated_at_epoch_millis` INTEGER NOT NULL,
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_installed_maps_display_name` ON `installed_maps` (`display_name`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_installed_maps_is_enabled` ON `installed_maps` (`is_enabled`)")
+                db.execSQL(
+                    """
+                    CREATE INDEX IF NOT EXISTS `index_installed_maps_imported_at_epoch_millis`
+                    ON `installed_maps` (`imported_at_epoch_millis`)
+                    """.trimIndent(),
+                )
+            }
+        }
     }
 }

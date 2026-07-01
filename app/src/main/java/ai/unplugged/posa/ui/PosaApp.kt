@@ -1,6 +1,16 @@
 package ai.unplugged.posa.ui
 
 import ai.unplugged.posa.data.local.PosaDatabase
+import ai.unplugged.posa.data.local.StarterChecklistInstaller
+import ai.unplugged.posa.data.local.InstalledMapImporter
+import ai.unplugged.posa.data.local.repository.repositories
+import ai.unplugged.posa.data.model.BreadcrumbPoint
+import ai.unplugged.posa.data.model.BreadcrumbTrail
+import ai.unplugged.posa.data.model.Checklist
+import ai.unplugged.posa.data.model.ChecklistItem
+import ai.unplugged.posa.data.model.FieldNote
+import ai.unplugged.posa.data.model.GearItem
+import ai.unplugged.posa.data.model.Waypoint
 import ai.unplugged.posa.data.pack.BundledPackInstaller
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -36,6 +46,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -47,7 +58,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ai.unplugged.posa.ui.theme.PosaTheme
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
+import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -58,10 +72,336 @@ fun PosaApp(database: PosaDatabase? = null) {
     var guideContentState by remember {
         mutableStateOf(GuideContentState(isLoading = database != null))
     }
+    var toolsContentState by remember {
+        mutableStateOf(ToolsContentState(isLoading = database != null))
+    }
+    var mapContentState by remember {
+        mutableStateOf(MapContentState(isLoading = database != null))
+    }
+    var toolsReloadToken by remember { mutableStateOf(0) }
+    var mapReloadToken by remember { mutableStateOf(0) }
+    var selectedWaypointId by rememberSaveable { mutableStateOf<String?>(null) }
     var bundledGuideInstalled by remember(database) {
         mutableStateOf(database == null)
     }
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+
+    fun runToolsMutation(block: suspend (PosaDatabase) -> Unit) {
+        val localDatabase = database
+        if (localDatabase == null) {
+            toolsContentState = toolsContentState.copy(
+                errorMessage = "Local tools database is not connected.",
+            )
+            return
+        }
+
+        coroutineScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    block(localDatabase)
+                }
+                toolsReloadToken += 1
+            } catch (exception: Exception) {
+                toolsContentState = toolsContentState.copy(
+                    isLoading = false,
+                    errorMessage = "Tools data could not be saved: ${exception.message.orEmpty()}",
+                )
+            }
+        }
+    }
+
+    fun runMapMutation(block: suspend (PosaDatabase) -> Unit) {
+        val localDatabase = database
+        if (localDatabase == null) {
+            mapContentState = mapContentState.copy(
+                errorMessage = "Local map database is not connected.",
+            )
+            return
+        }
+
+        coroutineScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    block(localDatabase)
+                }
+                mapReloadToken += 1
+                toolsReloadToken += 1
+            } catch (exception: Exception) {
+                mapContentState = mapContentState.copy(
+                    isLoading = false,
+                    errorMessage = "Map data could not be saved: ${exception.message.orEmpty()}",
+                )
+            }
+        }
+    }
+
+    val mapActions = MapActions(
+        onImportMap = { uri ->
+            runMapMutation { localDatabase ->
+                val importedMap = InstalledMapImporter.importFromUri(
+                    context = context.applicationContext,
+                    uri = uri,
+                    id = newLocalId("map-area"),
+                )
+                localDatabase.repositories().installedMaps.save(importedMap)
+            }
+        },
+        onSetInstalledMapEnabled = { installedMap, isEnabled ->
+            runMapMutation { localDatabase ->
+                localDatabase.repositories().installedMaps.save(
+                    installedMap.copy(
+                        isEnabled = isEnabled,
+                        updatedAtEpochMillis = System.currentTimeMillis(),
+                    ),
+                )
+            }
+        },
+        onDeleteInstalledMap = { installedMap ->
+            runMapMutation { localDatabase ->
+                File(installedMap.filePath).delete()
+                localDatabase.repositories().installedMaps.delete(installedMap.id)
+            }
+        },
+        onSaveCurrentWaypoint = { name, notes, coordinate ->
+            runMapMutation { localDatabase ->
+                val now = System.currentTimeMillis()
+                localDatabase.repositories().waypoints.save(
+                    Waypoint(
+                        id = newLocalId("waypoint"),
+                        name = name,
+                        latitude = coordinate.latitude,
+                        longitude = coordinate.longitude,
+                        elevationMeters = null,
+                        notes = notes,
+                        createdAtEpochMillis = now,
+                        updatedAtEpochMillis = now,
+                    ),
+                )
+            }
+        },
+        onDeleteWaypoint = { waypoint ->
+            runMapMutation { localDatabase ->
+                localDatabase.repositories().waypoints.delete(waypoint.id)
+            }
+            if (selectedWaypointId == waypoint.id) {
+                selectedWaypointId = null
+            }
+        },
+        onStartBreadcrumb = { coordinate ->
+            runMapMutation { localDatabase ->
+                val repositories = localDatabase.repositories()
+                val now = System.currentTimeMillis()
+                val trailId = newLocalId("breadcrumb-trail")
+                repositories.breadcrumbs.saveTrail(
+                    BreadcrumbTrail(
+                        id = trailId,
+                        name = "Trail ${now.toShortDateTimeLabel()}",
+                        startedAtEpochMillis = now,
+                        endedAtEpochMillis = null,
+                        createdAtEpochMillis = now,
+                        updatedAtEpochMillis = now,
+                    ),
+                )
+                coordinate?.let {
+                    repositories.breadcrumbs.savePoint(
+                        BreadcrumbPoint(
+                            id = newLocalId("breadcrumb-point"),
+                            trailId = trailId,
+                            latitude = it.latitude,
+                            longitude = it.longitude,
+                            accuracyMeters = it.accuracyMeters,
+                            recordedAtEpochMillis = it.recordedAtEpochMillis,
+                            sequenceNumber = 0,
+                        ),
+                    )
+                }
+            }
+        },
+        onStopBreadcrumb = { trail ->
+            runMapMutation { localDatabase ->
+                val now = System.currentTimeMillis()
+                localDatabase.repositories().breadcrumbs.saveTrail(
+                    trail.copy(
+                        endedAtEpochMillis = now,
+                        updatedAtEpochMillis = now,
+                    ),
+                )
+            }
+        },
+        onRecordBreadcrumbPoint = { trail, coordinate ->
+            runMapMutation { localDatabase ->
+                val repositories = localDatabase.repositories()
+                val existingPoints = repositories.breadcrumbs.listPointsForTrail(trail.id)
+                val lastPoint = existingPoints.maxByOrNull { it.sequenceNumber }
+                if (lastPoint == null || lastPoint.recordedAtEpochMillis != coordinate.recordedAtEpochMillis) {
+                    repositories.breadcrumbs.savePoint(
+                        BreadcrumbPoint(
+                            id = newLocalId("breadcrumb-point"),
+                            trailId = trail.id,
+                            latitude = coordinate.latitude,
+                            longitude = coordinate.longitude,
+                            accuracyMeters = coordinate.accuracyMeters,
+                            recordedAtEpochMillis = coordinate.recordedAtEpochMillis,
+                            sequenceNumber = (lastPoint?.sequenceNumber ?: -1) + 1,
+                        ),
+                    )
+                }
+            }
+        },
+    )
+
+    val toolsActions = ToolsActions(
+        onCreateChecklist = { title, description ->
+            runToolsMutation { localDatabase ->
+                val now = System.currentTimeMillis()
+                localDatabase.repositories().checklists.saveChecklist(
+                    Checklist(
+                        id = newLocalId("checklist"),
+                        title = title,
+                        description = description,
+                        isArchived = false,
+                        createdAtEpochMillis = now,
+                        updatedAtEpochMillis = now,
+                    ),
+                )
+            }
+        },
+        onUpdateChecklist = { checklist, title, description, isArchived ->
+            runToolsMutation { localDatabase ->
+                localDatabase.repositories().checklists.saveChecklist(
+                    checklist.copy(
+                        title = title,
+                        description = description,
+                        isArchived = isArchived,
+                        updatedAtEpochMillis = System.currentTimeMillis(),
+                    ),
+                )
+            }
+        },
+        onDeleteChecklist = { checklist ->
+            runToolsMutation { localDatabase ->
+                localDatabase.repositories().checklists.deleteChecklist(checklist.id)
+            }
+        },
+        onCreateChecklistItem = { checklistId, label, details ->
+            runToolsMutation { localDatabase ->
+                val repositories = localDatabase.repositories()
+                val now = System.currentTimeMillis()
+                val nextPosition = repositories.checklists
+                    .listItemsForChecklist(checklistId)
+                    .maxOfOrNull { it.position + 1 } ?: 0
+                repositories.checklists.saveItem(
+                    ChecklistItem(
+                        id = newLocalId("checklist-item"),
+                        checklistId = checklistId,
+                        label = label,
+                        details = details,
+                        position = nextPosition,
+                        isChecked = false,
+                        updatedAtEpochMillis = now,
+                    ),
+                )
+            }
+        },
+        onUpdateChecklistItem = { item, label, details, isChecked ->
+            runToolsMutation { localDatabase ->
+                localDatabase.repositories().checklists.saveItem(
+                    item.copy(
+                        label = label,
+                        details = details,
+                        isChecked = isChecked,
+                        updatedAtEpochMillis = System.currentTimeMillis(),
+                    ),
+                )
+            }
+        },
+        onDeleteChecklistItem = { item ->
+            runToolsMutation { localDatabase ->
+                localDatabase.repositories().checklists.deleteItem(item.id)
+            }
+        },
+        onCreateGearItem = { draft ->
+            runToolsMutation { localDatabase ->
+                val now = System.currentTimeMillis()
+                localDatabase.repositories().gear.save(
+                    GearItem(
+                        id = newLocalId("gear"),
+                        name = draft.name,
+                        category = draft.category,
+                        quantity = draft.quantity,
+                        condition = draft.condition,
+                        notes = draft.notes,
+                        isAvailable = draft.isAvailable,
+                        createdAtEpochMillis = now,
+                        updatedAtEpochMillis = now,
+                    ),
+                )
+            }
+        },
+        onUpdateGearItem = { item, draft ->
+            runToolsMutation { localDatabase ->
+                localDatabase.repositories().gear.save(
+                    item.copy(
+                        name = draft.name,
+                        category = draft.category,
+                        quantity = draft.quantity,
+                        condition = draft.condition,
+                        notes = draft.notes,
+                        isAvailable = draft.isAvailable,
+                        updatedAtEpochMillis = System.currentTimeMillis(),
+                    ),
+                )
+            }
+        },
+        onDeleteGearItem = { item ->
+            runToolsMutation { localDatabase ->
+                localDatabase.repositories().gear.delete(item.id)
+            }
+        },
+        onCreateFieldNote = { draft ->
+            runToolsMutation { localDatabase ->
+                val now = System.currentTimeMillis()
+                localDatabase.repositories().fieldNotes.save(
+                    FieldNote(
+                        id = newLocalId("field-note"),
+                        title = draft.title,
+                        body = draft.body,
+                        createdAtEpochMillis = now,
+                        updatedAtEpochMillis = now,
+                        latitude = draft.latitude,
+                        longitude = draft.longitude,
+                        waypointId = draft.waypointId,
+                        checklistId = draft.checklistId,
+                        guideCardId = draft.guideCardId,
+                        gearItemId = draft.gearItemId,
+                    ),
+                )
+            }
+        },
+        onUpdateFieldNote = { note, draft ->
+            runToolsMutation { localDatabase ->
+                localDatabase.repositories().fieldNotes.save(
+                    note.copy(
+                        title = draft.title,
+                        body = draft.body,
+                        updatedAtEpochMillis = System.currentTimeMillis(),
+                        latitude = draft.latitude,
+                        longitude = draft.longitude,
+                        waypointId = draft.waypointId,
+                        checklistId = draft.checklistId,
+                        guideCardId = draft.guideCardId,
+                        gearItemId = draft.gearItemId,
+                    ),
+                )
+            }
+        },
+        onDeleteFieldNote = { note ->
+            runToolsMutation { localDatabase ->
+                localDatabase.repositories().fieldNotes.delete(note.id)
+            }
+        },
+    )
 
     LaunchedEffect(database) {
         val localDatabase = database
@@ -83,6 +423,56 @@ fun PosaApp(database: PosaDatabase? = null) {
             guideContentState = guideContentState.copy(
                 isLoading = false,
                 errorMessage = "Bundled guide pack could not be loaded: ${exception.message.orEmpty()}",
+            )
+        }
+    }
+
+    LaunchedEffect(database, bundledGuideInstalled, toolsReloadToken) {
+        val localDatabase = database
+        if (localDatabase == null) {
+            toolsContentState = ToolsContentState(
+                errorMessage = "Local tools database is not connected.",
+            )
+            return@LaunchedEffect
+        }
+
+        toolsContentState = toolsContentState.copy(isLoading = true, errorMessage = null)
+        try {
+            val loadedState = withContext(Dispatchers.IO) {
+                StarterChecklistInstaller.installIfNeeded(context, localDatabase)
+                loadToolsContent(localDatabase)
+            }
+            toolsContentState = loadedState
+        } catch (exception: Exception) {
+            toolsContentState = toolsContentState.copy(
+                isLoading = false,
+                errorMessage = "Tools data could not be loaded: ${exception.message.orEmpty()}",
+            )
+        }
+    }
+
+    LaunchedEffect(database, mapReloadToken) {
+        val localDatabase = database
+        if (localDatabase == null) {
+            mapContentState = MapContentState(
+                errorMessage = "Local map database is not connected.",
+            )
+            return@LaunchedEffect
+        }
+
+        mapContentState = mapContentState.copy(isLoading = true, errorMessage = null)
+        try {
+            val loadedState = withContext(Dispatchers.IO) {
+                loadMapContent(localDatabase)
+            }
+            mapContentState = loadedState
+            if (selectedWaypointId != null && loadedState.waypoints.none { it.id == selectedWaypointId }) {
+                selectedWaypointId = null
+            }
+        } catch (exception: Exception) {
+            mapContentState = mapContentState.copy(
+                isLoading = false,
+                errorMessage = "Map data could not be loaded: ${exception.message.orEmpty()}",
             )
         }
     }
@@ -157,14 +547,20 @@ fun PosaApp(database: PosaDatabase? = null) {
                 destination = selectedDestination,
                 contentPadding = innerPadding,
                 guideContentState = guideContentState,
+                mapContentState = mapContentState,
+                toolsContentState = toolsContentState,
+                mapActions = mapActions,
+                toolsActions = toolsActions,
                 guideSearchQuery = guideSearchQuery,
                 selectedGuideCardId = selectedGuideCardId,
+                selectedWaypointId = selectedWaypointId,
                 onGuideSearchChange = {
                     guideSearchQuery = it
                     selectedGuideCardId = null
                 },
                 onSelectGuideCard = { selectedGuideCardId = it },
                 onBackToGuideList = { selectedGuideCardId = null },
+                onSelectWaypoint = { selectedWaypointId = it },
             )
         }
     }
@@ -175,11 +571,17 @@ private fun DestinationScreen(
     destination: PosaDestination,
     contentPadding: PaddingValues,
     guideContentState: GuideContentState,
+    mapContentState: MapContentState,
+    toolsContentState: ToolsContentState,
+    mapActions: MapActions,
+    toolsActions: ToolsActions,
     guideSearchQuery: String,
     selectedGuideCardId: String?,
+    selectedWaypointId: String?,
     onGuideSearchChange: (String) -> Unit,
     onSelectGuideCard: (String) -> Unit,
     onBackToGuideList: () -> Unit,
+    onSelectWaypoint: (String?) -> Unit,
 ) {
     Surface(
         modifier = Modifier
@@ -206,8 +608,16 @@ private fun DestinationScreen(
                     onBackToList = onBackToGuideList,
                 )
                 PosaDestination.Packs -> PacksSection(guideContentState)
-                PosaDestination.Map,
-                PosaDestination.Tools -> NextSteps(destination.nextSteps)
+                PosaDestination.Tools -> ToolsSection(
+                    state = toolsContentState,
+                    actions = toolsActions,
+                )
+                PosaDestination.Map -> MapSection(
+                    state = mapContentState,
+                    selectedWaypointId = selectedWaypointId,
+                    onSelectWaypoint = onSelectWaypoint,
+                    actions = mapActions,
+                )
             }
         }
     }
@@ -301,3 +711,9 @@ private val PosaDestination.icon: ImageVector
         PosaDestination.Guide -> Icons.AutoMirrored.Outlined.MenuBook
         PosaDestination.Packs -> Icons.Outlined.Inventory2
     }
+
+private fun newLocalId(prefix: String): String = "$prefix-${UUID.randomUUID()}"
+
+private fun Long.toShortDateTimeLabel(): String =
+    java.time.format.DateTimeFormatter.ofPattern("MMM d h:mm a")
+        .format(java.time.Instant.ofEpochMilli(this).atZone(java.time.ZoneId.systemDefault()))

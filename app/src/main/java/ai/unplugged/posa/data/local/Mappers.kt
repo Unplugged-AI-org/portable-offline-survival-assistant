@@ -7,6 +7,7 @@ import ai.unplugged.posa.data.local.entity.ChecklistItemEntity
 import ai.unplugged.posa.data.local.entity.FieldNoteEntity
 import ai.unplugged.posa.data.local.entity.GearItemEntity
 import ai.unplugged.posa.data.local.entity.GuideCardEntity
+import ai.unplugged.posa.data.local.entity.InstalledMapEntity
 import ai.unplugged.posa.data.local.entity.PackEntity
 import ai.unplugged.posa.data.local.entity.ProvenanceEntity
 import ai.unplugged.posa.data.local.entity.WaypointEntity
@@ -17,6 +18,7 @@ import ai.unplugged.posa.data.model.ChecklistItem
 import ai.unplugged.posa.data.model.FieldNote
 import ai.unplugged.posa.data.model.GearItem
 import ai.unplugged.posa.data.model.GuideCard
+import ai.unplugged.posa.data.model.InstalledMap
 import ai.unplugged.posa.data.model.Pack
 import ai.unplugged.posa.data.model.Provenance
 import ai.unplugged.posa.data.model.Waypoint
@@ -79,6 +81,28 @@ internal fun BreadcrumbPoint.toEntity(): BreadcrumbPointEntity = BreadcrumbPoint
     accuracyMeters = accuracyMeters,
     recordedAtEpochMillis = recordedAtEpochMillis,
     sequenceNumber = sequenceNumber,
+)
+
+internal fun InstalledMapEntity.toModel(): InstalledMap = InstalledMap(
+    id = id,
+    displayName = displayName,
+    fileName = fileName,
+    filePath = filePath,
+    byteSize = byteSize,
+    isEnabled = isEnabled,
+    importedAtEpochMillis = importedAtEpochMillis,
+    updatedAtEpochMillis = updatedAtEpochMillis,
+)
+
+internal fun InstalledMap.toEntity(): InstalledMapEntity = InstalledMapEntity(
+    id = id,
+    displayName = displayName,
+    fileName = fileName,
+    filePath = filePath,
+    byteSize = byteSize,
+    isEnabled = isEnabled,
+    importedAtEpochMillis = importedAtEpochMillis,
+    updatedAtEpochMillis = updatedAtEpochMillis,
 )
 
 internal fun FieldNoteEntity.toModel(): FieldNote = FieldNote(

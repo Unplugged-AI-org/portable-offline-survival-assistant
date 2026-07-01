@@ -8,9 +8,9 @@ The goal is not to build a generic survival chatbot. POSA should feel like a fie
 
 ## Status
 
-This repository is at Phase 3: packs and guide cards.
+This repository is at Phase 6: user-loaded map areas.
 
-A native Kotlin Android app shell is present under `app/`. It launches POSA with four top-level Compose tabs: Map, Tools, Guide, and Packs. Room-backed local storage covers waypoints, breadcrumbs, field notes, checklists, gear/tools, packs, guide cards, and provenance metadata. A bundled starter guide pack now installs from local app assets, parses a pack manifest plus Markdown card front matter, shows source/provenance metadata, and supports local keyword search. Mapsforge rendering, AI, accounts, analytics, and downloads are intentionally deferred to later roadmap phases.
+A native Kotlin Android app shell is present under `app/`. It launches POSA with four top-level Compose tabs: Map, Tools, Guide, and Packs. Room-backed local storage covers waypoints, breadcrumbs, field notes, checklists, gear/tools, packs, guide cards, and provenance metadata. A bundled starter guide pack installs from local app assets, parses a pack manifest plus Markdown card front matter, shows source/provenance metadata, and supports local keyword search. The Tools tab supports local starter survival checklists, editable user checklists and checklist items, gear/tool inventory with have/missing state, and timestamped local field notes with optional location, waypoint, checklist, guide-card, and gear links. The Map tab now embeds Mapsforge, renders a tiny bundled local Monaco test map fixture, requests Android location permission, displays current coordinates, saves current-location waypoints, shows waypoint details with distance and bearing, and records local breadcrumb trails. AI, accounts, analytics, sync, routing, and map downloads are intentionally deferred to later roadmap phases.
 
 ## Current Product Decisions
 
@@ -86,7 +86,7 @@ From the repository root:
 
 Then open the project in Android Studio or install `app/build/outputs/apk/debug/app-debug.apk` on an Android device or emulator.
 
-Run local JVM tests, including the Room repository CRUD and bundled pack loader/search coverage:
+Run local JVM tests, including Room repository CRUD, starter checklist seeding, field tools CRUD, and bundled pack loader/search coverage:
 
 ```sh
 ./gradlew :app:testDebugUnitTest
@@ -96,11 +96,23 @@ Run local JVM tests, including the Room repository CRUD and bundled pack loader/
 
 Phase 2 adds a Room database named `posa.db`, repository interfaces, Room repository implementations, and an explicit development seed path at `PosaDevelopmentSeed`. The seed data is fixture-only and marked as draft placeholder content; it is not user-facing survival guidance.
 
-Room schema export is temporarily disabled because Room 2.8.4's KSP schema exporter currently hits a `kotlinx.serialization` `AbstractMethodError` when deserializing exported schema JSON during clean builds. Re-enable schema export after the Room/KSP dependency issue is resolved.
+Room schema export is enabled under `app/schemas`, and database migrations should include focused migration tests before new schema versions are added.
 
 ## Packs And Guide Cards
 
 Phase 3 adds a bundled official draft pack at `app/src/main/assets/packs/wilderness-basics`. The local installer lives at `app/src/main/java/ai/unplugged/posa/data/pack/BundledPackInstaller.kt`, and the data-backed Guide/Packs UI lives at `app/src/main/java/ai/unplugged/posa/ui/GuideScreens.kt`. The app installs that pack locally on startup, loads six guide cards, stores per-card provenance, and renders Guide and Packs tabs from the local database. The guide content is draft source-aware synthesis and does not include medical treatment guidance.
+
+## Checklists, Gear, And Field Notes
+
+Phase 4 adds a data-backed Tools tab. On first local startup, POSA installs editable starter checklists for day hikes, emergency overnights, first-aid kit inventory, and vehicle field kits. Users can create, update, and delete local checklists and items, toggle item completion, maintain gear/tools with have or missing state, and write local field notes with title, body, created/updated timestamps, optional latitude/longitude, and optional links to existing waypoints, checklists, guide cards, and gear items. This data stays in local Room/SQLite storage; no cloud, account, analytics, sync, AI generation, or map implementation is added.
+
+## Mapsforge Map Foundation
+
+Phase 5 adds a data-backed Map tab using Mapsforge. POSA bundles `app/src/main/assets/maps/monaco.map` as a tiny local rendering fixture from Mapsforge's public test map source so early development can verify offline map rendering without bundling a large production map area. The app shows required OpenStreetMap attribution in the map UI, displays live device coordinates after Android location permission is granted, saves waypoints from the current location, calculates distance and bearing from the current fix to saved waypoints, and starts/stops local breadcrumb trail recording.
+
+Phase 6 adds user-loaded map areas. The Map tab can import Mapsforge `.map` files through Android's storage picker, validates that the selected file is readable by Mapsforge, copies it into app-private storage, stores installed map metadata locally, and lets users enable, disable, or delete installed areas. Enabled user maps render offline without network access; when no user map is enabled, the tiny bundled Monaco fixture remains available for renderer checks.
+
+Supported development/test map files can come from the Mapsforge public download index, such as `https://download.mapsforge.org/maps/v5/`. Use small regional files for testing. Do not bulk-download map tiles from public OpenStreetMap tile servers, and do not bundle large production map datasets in the base app. Routing, bulk map downloads, cloud sync, accounts, analytics, and AI generation remain intentionally unimplemented.
 
 ## Safety Note
 
@@ -108,4 +120,4 @@ POSA is not a substitute for professional emergency, medical, legal, or rescue a
 
 ## Attribution
 
-OpenStreetMap data and any derived map packs must preserve required attribution and comply with applicable licenses, including ODbL where relevant.
+OpenStreetMap data and any derived map packs must preserve required attribution and comply with applicable licenses, including ODbL where relevant. The bundled Monaco Mapsforge fixture is used only as a small local rendering test fixture and is attributed in-app.

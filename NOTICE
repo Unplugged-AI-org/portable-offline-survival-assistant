@@ -2,3 +2,12 @@ POSA - Portable Offline Survival Assistant
 Copyright 2026 Unplugged AI
 
 This product may include or display OpenStreetMap-derived data in future map features. OpenStreetMap attribution and license obligations must be preserved wherever applicable.
+
+POSA includes a tiny bundled Mapsforge Monaco map fixture for local renderer verification:
+https://download.mapsforge.org/maps/v5/europe/monaco.map
+
+Map data is OpenStreetMap-derived and must be attributed in app UI as:
+Map data (c) OpenStreetMap contributors.
+
+Mapsforge is used for offline map rendering:
+https://github.com/mapsforge/mapsforge

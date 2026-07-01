@@ -46,6 +46,11 @@ android {
         compose = true
     }
 
+    sourceSets {
+        getByName("test").assets.srcDir("$projectDir/schemas")
+        getByName("androidTest").assets.srcDir("$projectDir/schemas")
+    }
+
     testOptions {
         unitTests {
             isIncludeAndroidResources = true
@@ -68,6 +73,9 @@ dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.room:room-ktx:2.8.4")
     implementation("androidx.room:room-runtime:2.8.4")
+    implementation("org.mapsforge:mapsforge-map-android:0.25.0")
+    implementation("org.mapsforge:mapsforge-map-reader:0.25.0")
+    implementation("org.mapsforge:mapsforge-themes:0.25.0")
 
     ksp("androidx.room:room-compiler:2.8.4")
 

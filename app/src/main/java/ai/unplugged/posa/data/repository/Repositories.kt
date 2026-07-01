@@ -7,6 +7,7 @@ import ai.unplugged.posa.data.model.ChecklistItem
 import ai.unplugged.posa.data.model.FieldNote
 import ai.unplugged.posa.data.model.GearItem
 import ai.unplugged.posa.data.model.GuideCard
+import ai.unplugged.posa.data.model.InstalledMap
 import ai.unplugged.posa.data.model.Pack
 import ai.unplugged.posa.data.model.Provenance
 import ai.unplugged.posa.data.model.Waypoint
@@ -27,6 +28,14 @@ interface BreadcrumbRepository {
     suspend fun getPoint(id: String): BreadcrumbPoint?
     suspend fun listPointsForTrail(trailId: String): List<BreadcrumbPoint>
     suspend fun deletePoint(id: String)
+}
+
+interface InstalledMapRepository {
+    suspend fun save(map: InstalledMap)
+    suspend fun get(id: String): InstalledMap?
+    suspend fun list(): List<InstalledMap>
+    suspend fun listEnabled(): List<InstalledMap>
+    suspend fun delete(id: String)
 }
 
 interface FieldNoteRepository {

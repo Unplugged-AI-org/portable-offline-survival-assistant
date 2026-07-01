@@ -7,6 +7,7 @@ import ai.unplugged.posa.data.local.entity.ChecklistItemEntity
 import ai.unplugged.posa.data.local.entity.FieldNoteEntity
 import ai.unplugged.posa.data.local.entity.GearItemEntity
 import ai.unplugged.posa.data.local.entity.GuideCardEntity
+import ai.unplugged.posa.data.local.entity.InstalledMapEntity
 import ai.unplugged.posa.data.local.entity.PackEntity
 import ai.unplugged.posa.data.local.entity.ProvenanceEntity
 import ai.unplugged.posa.data.local.entity.WaypointEntity
@@ -60,6 +61,24 @@ interface BreadcrumbDao {
 
     @Query("DELETE FROM breadcrumb_points WHERE id = :id")
     suspend fun deletePoint(id: String)
+}
+
+@Dao
+interface InstalledMapDao {
+    @Upsert
+    suspend fun upsert(map: InstalledMapEntity)
+
+    @Query("SELECT * FROM installed_maps WHERE id = :id")
+    suspend fun get(id: String): InstalledMapEntity?
+
+    @Query("SELECT * FROM installed_maps ORDER BY is_enabled DESC, display_name COLLATE NOCASE")
+    suspend fun list(): List<InstalledMapEntity>
+
+    @Query("SELECT * FROM installed_maps WHERE is_enabled = 1 ORDER BY imported_at_epoch_millis DESC")
+    suspend fun listEnabled(): List<InstalledMapEntity>
+
+    @Query("DELETE FROM installed_maps WHERE id = :id")
+    suspend fun delete(id: String)
 }
 
 @Dao

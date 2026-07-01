@@ -4,6 +4,7 @@ import ai.unplugged.posa.data.local.repository.RoomLocalRepositories
 import ai.unplugged.posa.data.local.repository.repositories
 import ai.unplugged.posa.data.model.FieldNote
 import ai.unplugged.posa.data.model.GearItem
+import ai.unplugged.posa.data.model.InstalledMap
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -64,28 +65,86 @@ class LocalDataRepositoryTest {
     }
 
     @Test
-    fun checklistAndGearRepositoriesCreateReadUpdateAndDelete() = runTest {
+    fun installedMapRepositoryCreatesReadsTogglesAndDeletes() = runTest {
+        val map = InstalledMap(
+            id = "map-area-test",
+            displayName = "Local Area",
+            fileName = "local-area.map",
+            filePath = "/local/maps/local-area.map",
+            byteSize = 42_000L,
+            isEnabled = true,
+            importedAtEpochMillis = NOW,
+            updatedAtEpochMillis = NOW,
+        )
+
+        repositories.installedMaps.save(map)
+        assertEquals(map, repositories.installedMaps.get("map-area-test"))
+        assertEquals(listOf(map), repositories.installedMaps.list())
+        assertEquals(listOf(map), repositories.installedMaps.listEnabled())
+
+        val disabledMap = map.copy(isEnabled = false, updatedAtEpochMillis = NOW + 1)
+        repositories.installedMaps.save(disabledMap)
+        assertEquals(disabledMap, repositories.installedMaps.get("map-area-test"))
+        assertEquals(emptyList<InstalledMap>(), repositories.installedMaps.listEnabled())
+
+        repositories.installedMaps.delete("map-area-test")
+        assertNull(repositories.installedMaps.get("map-area-test"))
+    }
+
+    @Test
+    fun checklistRepositoryCreatesReadsUpdatesItemsAndDeletes() = runTest {
         val checklist = PosaDevelopmentSeed.sampleChecklist(NOW)
         val item = PosaDevelopmentSeed.sampleChecklistItem(NOW)
-        val gear = PosaDevelopmentSeed.sampleGearItem(NOW)
 
         repositories.checklists.saveChecklist(checklist)
+        assertEquals(checklist, repositories.checklists.getChecklist(PosaDevelopmentSeed.CHECKLIST_ID))
+        assertEquals(listOf(checklist), repositories.checklists.listChecklists())
+
+        val archivedChecklist = checklist.copy(
+            title = "Updated Day Kit",
+            description = "Updated checklist description.",
+            isArchived = true,
+            updatedAtEpochMillis = NOW + 1,
+        )
+        repositories.checklists.saveChecklist(archivedChecklist)
+        assertEquals(archivedChecklist, repositories.checklists.getChecklist(PosaDevelopmentSeed.CHECKLIST_ID))
+
         repositories.checklists.saveItem(item)
         assertEquals(listOf(item), repositories.checklists.listItemsForChecklist(PosaDevelopmentSeed.CHECKLIST_ID))
 
-        val checkedItem = item.copy(isChecked = true, updatedAtEpochMillis = NOW + 1)
+        val checkedItem = item.copy(
+            label = "Water bottle filled",
+            details = null,
+            isChecked = true,
+            updatedAtEpochMillis = NOW + 2,
+        )
         repositories.checklists.saveItem(checkedItem)
         assertEquals(checkedItem, repositories.checklists.getItem(PosaDevelopmentSeed.CHECKLIST_ITEM_ID))
 
+        repositories.checklists.deleteItem(PosaDevelopmentSeed.CHECKLIST_ITEM_ID)
+        assertNull(repositories.checklists.getItem(PosaDevelopmentSeed.CHECKLIST_ITEM_ID))
+
+        repositories.checklists.saveItem(checkedItem)
+        repositories.checklists.deleteChecklist(PosaDevelopmentSeed.CHECKLIST_ID)
+        assertNull(repositories.checklists.getChecklist(PosaDevelopmentSeed.CHECKLIST_ID))
+        assertNull(repositories.checklists.getItem(PosaDevelopmentSeed.CHECKLIST_ITEM_ID))
+    }
+
+    @Test
+    fun gearRepositoryCreatesReadsUpdatesHaveMissingStateAndDeletes() = runTest {
+        val gear = PosaDevelopmentSeed.sampleGearItem(NOW)
+
         repositories.gear.save(gear)
+        assertEquals(gear, repositories.gear.get(PosaDevelopmentSeed.GEAR_ITEM_ID))
+        assertEquals(listOf(gear), repositories.gear.list())
+
         val missingGear = gear.copy(isAvailable = false, notes = "Battery missing.", updatedAtEpochMillis = NOW + 1)
         repositories.gear.save(missingGear)
         assertEquals(missingGear, repositories.gear.get(PosaDevelopmentSeed.GEAR_ITEM_ID))
 
-        repositories.checklists.deleteChecklist(PosaDevelopmentSeed.CHECKLIST_ID)
         repositories.gear.delete(PosaDevelopmentSeed.GEAR_ITEM_ID)
-        assertNull(repositories.checklists.getItem(PosaDevelopmentSeed.CHECKLIST_ITEM_ID))
         assertNull(repositories.gear.get(PosaDevelopmentSeed.GEAR_ITEM_ID))
+        assertEquals(emptyList<GearItem>(), repositories.gear.list())
     }
 
     @Test
@@ -143,6 +202,44 @@ class LocalDataRepositoryTest {
             NOW + 1,
             repositories.packs.get(PosaDevelopmentSeed.PACK_ID)?.updatedAtEpochMillis,
         )
+    }
+
+    @Test
+    fun fieldNoteRepositoryCreatesReadsUpdatesOptionalLinksAndDeletes() = runTest {
+        val provenance = PosaDevelopmentSeed.sampleProvenance()
+        val pack = PosaDevelopmentSeed.samplePack(NOW)
+        val card = PosaDevelopmentSeed.sampleGuideCard(NOW)
+        val waypoint = PosaDevelopmentSeed.sampleWaypoint(NOW)
+        val checklist = PosaDevelopmentSeed.sampleChecklist(NOW)
+        val gear = PosaDevelopmentSeed.sampleGearItem(NOW)
+        val note = PosaDevelopmentSeed.sampleFieldNote(NOW)
+
+        repositories.provenance.save(provenance)
+        repositories.packs.save(pack)
+        repositories.guideCards.save(card)
+        repositories.waypoints.save(waypoint)
+        repositories.checklists.saveChecklist(checklist)
+        repositories.gear.save(gear)
+
+        repositories.fieldNotes.save(note)
+        assertEquals(note, repositories.fieldNotes.get(PosaDevelopmentSeed.NOTE_ID))
+        assertEquals(listOf(note), repositories.fieldNotes.list())
+
+        val updatedNote = note.copy(
+            title = "Updated trailhead note",
+            body = "Updated local observation.",
+            latitude = null,
+            longitude = null,
+            waypointId = null,
+            gearItemId = null,
+            updatedAtEpochMillis = NOW + 1,
+        )
+        repositories.fieldNotes.save(updatedNote)
+        assertEquals(updatedNote, repositories.fieldNotes.get(PosaDevelopmentSeed.NOTE_ID))
+
+        repositories.fieldNotes.delete(PosaDevelopmentSeed.NOTE_ID)
+        assertNull(repositories.fieldNotes.get(PosaDevelopmentSeed.NOTE_ID))
+        assertEquals(emptyList<FieldNote>(), repositories.fieldNotes.list())
     }
 
     @Test
