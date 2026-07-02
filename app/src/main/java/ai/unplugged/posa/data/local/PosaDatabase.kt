@@ -41,7 +41,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         GuideCardEntity::class,
         ProvenanceEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class PosaDatabase : RoomDatabase() {
@@ -63,7 +63,7 @@ abstract class PosaDatabase : RoomDatabase() {
                 context.applicationContext,
                 PosaDatabase::class.java,
                 DATABASE_NAME,
-            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
+            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build()
 
         fun createInMemory(context: Context): PosaDatabase =
             Room.inMemoryDatabaseBuilder(
@@ -108,6 +108,12 @@ abstract class PosaDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE `installed_maps` ADD COLUMN `bounding_box_min_longitude` REAL")
                 db.execSQL("ALTER TABLE `installed_maps` ADD COLUMN `bounding_box_max_latitude` REAL")
                 db.execSQL("ALTER TABLE `installed_maps` ADD COLUMN `bounding_box_max_longitude` REAL")
+            }
+        }
+
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `guide_cards` ADD COLUMN `workflow_tags` TEXT")
             }
         }
     }

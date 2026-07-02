@@ -25,7 +25,7 @@ class GuidedQuestionRetrievalTest {
         assertEquals("Showing installed-source excerpts only.", result.statusText)
         assertEquals(RetrievalConfidence.High, result.confidence)
         assertEquals(listOf("Water Planning"), result.sourceMatches.map { it.item.card.title })
-        assertTrue(result.sourceMatches.first().excerpt.contains("Carry enough water"))
+        assertTrue(result.sourceMatches.first().excerpt.contains("planned route"))
         assertEquals("National Park Service - Ten Essentials", result.sourceMatches.first().item.provenance?.sourceTitle)
     }
 
@@ -71,6 +71,38 @@ class GuidedQuestionRetrievalTest {
         assertTrue(result.mapFacts.any { it.contains("Saved waypoints: Trailhead") })
     }
 
+    @Test
+    fun synonymExpansionFindsInstalledSourceWithoutGeneratingAnswer() {
+        val result = answerGuidedQuestion(
+            guideState = GuideContentState(
+                allCards = listOf(cardItem(waterCard()), cardItem(signalCard())),
+            ),
+            toolsState = ToolsContentState(),
+            mapState = MapContentState(),
+            question = "What purifier should I carry?",
+        )
+
+        assertEquals("Showing installed-source excerpts only.", result.statusText)
+        assertEquals(listOf("Water Planning"), result.sourceMatches.map { it.item.card.title })
+        assertTrue(result.sourceMatches.first().matchedTerms.contains("treatment"))
+        assertTrue(result.sourceMatches.first().excerpt.contains("Carry a treatment method"))
+    }
+
+    @Test
+    fun synonymExpansionImprovesSignalQueries() {
+        val result = answerGuidedQuestion(
+            guideState = GuideContentState(
+                allCards = listOf(cardItem(signalCard())),
+            ),
+            toolsState = ToolsContentState(),
+            mapState = MapContentState(),
+            question = "How do I stay visible?",
+        )
+
+        assertEquals(listOf("Signaling Basics"), result.sourceMatches.map { it.item.card.title })
+        assertTrue(result.sourceMatches.first().matchedTerms.contains("signal"))
+    }
+
     private fun cardItem(card: GuideCard): GuideCardItem = GuideCardItem(
         card = card,
         pack = null,
@@ -91,12 +123,12 @@ class GuidedQuestionRetrievalTest {
         id = "water",
         title = "Water Planning",
         category = "water",
-        summary = "Plan water before walking.",
+        summary = "Carry a treatment method before walking.",
         body = """
             ## Field Use
 
-            - Identify likely water sources before travel and confirm whether they are seasonal.
-            - Carry enough water for the planned route plus a delay.
+            - Carry a treatment method before travel.
+            - Confirm likely sources before the planned route plus a delay.
         """.trimIndent(),
     )
 

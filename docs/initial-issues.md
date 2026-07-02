@@ -86,23 +86,26 @@ These issues can be created after the GitHub repo exists at `Unplugged-AI-org/po
 
 ### Render saved waypoints on Mapsforge map
 
-Status: Backlog / Map UI polish
+Status: Implemented on `maps-overlays`; follow-up polish on `maps-longpress-waypoint`
+and `fix-longpress-npe`. Needs final manual device/emulator QA.
 
 Problem:
 Saved waypoints are persisted and visible in guided workflow location context, but they do not render visually on the Map screen.
 
-Current behavior:
+Previous behavior:
 
 - User can save waypoint.
 - Workflow can read and display saved waypoint.
 - Map view does not show marker overlay.
 
-Expected behavior:
+Implemented behavior:
 
 - Saved waypoints render as visible markers on the offline map.
 - Markers persist after app restart.
 - Deleted waypoints disappear from the map.
 - Selecting a waypoint centers the map on that waypoint if practical.
+- Long-pressing the map drops a waypoint at that coordinate.
+- Tapping a waypoint pin opens details with edit/delete actions.
 
 Scope:
 

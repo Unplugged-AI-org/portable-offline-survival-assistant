@@ -169,7 +169,7 @@ private fun GuideCard.needsMapContext(): Boolean =
     contextTerms().any { it in MAP_CONTEXT_TERMS }
 
 private fun GuideCard.contextTerms(): List<String> =
-    toQueryTerms(title, category, summary)
+    toQueryTerms(title, category, summary, workflowTags.joinToString(" "))
 
 private fun GearItem.matchesAny(terms: List<String>): Boolean =
     toQueryTerms(name, category.orEmpty(), condition.orEmpty(), notes.orEmpty())
@@ -209,7 +209,7 @@ private fun String.limitLength(maxLength: Int): String {
 }
 
 private fun GuideCard.searchText(): String =
-    toQueryTerms(id, title, category, summary, bodyMarkdown).joinToString(" ")
+    toRawTerms(id, title, category, summary, bodyMarkdown, workflowTags.joinToString(" ")).joinToString(" ")
 
 private fun String.normalized(): String =
     lowercase(Locale.US)
@@ -218,11 +218,18 @@ private fun String.toQueryTerms(): List<String> =
     toQueryTerms(this)
 
 private fun toQueryTerms(vararg values: String): List<String> =
+    toRawTerms(*values).withSynonyms()
+
+private fun toRawTerms(vararg values: String): List<String> =
     values.joinToString(" ")
         .lowercase(Locale.US)
         .split(Regex("[^a-z0-9]+"))
         .map { it.trim() }
         .filter { it.length >= MIN_TERM_LENGTH && it !in STOP_WORDS }
+        .distinct()
+
+private fun List<String>.withSynonyms(): List<String> =
+    flatMap { term -> listOf(term) + QUERY_SYNONYMS.orEmpty(term) }
         .distinct()
 
 private fun Double.coordinateLabel(): String =
@@ -274,6 +281,28 @@ private val MAP_CONTEXT_TERMS = setOf(
     "waypoint",
     "where",
 )
+
+private val QUERY_SYNONYMS = mapOf(
+    "cell" to listOf("phone"),
+    "charge" to listOf("battery", "power"),
+    "charger" to listOf("battery", "power"),
+    "disinfect" to listOf("treatment", "water"),
+    "findable" to listOf("signal", "signaling"),
+    "filter" to listOf("treatment", "water"),
+    "filtration" to listOf("treatment", "water"),
+    "gps" to listOf("navigation", "map"),
+    "hydrate" to listOf("water"),
+    "hydration" to listOf("water"),
+    "locate" to listOf("location", "map"),
+    "phone" to listOf("battery", "power"),
+    "purification" to listOf("treatment", "water"),
+    "purifier" to listOf("treatment", "water"),
+    "purify" to listOf("treatment", "water"),
+    "visible" to listOf("signal", "signaling"),
+    "visibility" to listOf("signal", "signaling"),
+)
+
+private fun Map<String, List<String>>.orEmpty(term: String): List<String> = this[term] ?: emptyList()
 
 private const val MIN_TERM_LENGTH = 3
 private const val MIN_SOURCE_SCORE = 2

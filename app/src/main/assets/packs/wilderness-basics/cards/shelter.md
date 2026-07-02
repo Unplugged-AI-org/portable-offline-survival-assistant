@@ -3,6 +3,7 @@ id: shelter
 title: Emergency Shelter
 category: shelter
 summary: Carry lightweight shelter and choose a site that reduces exposure without adding terrain risk.
+workflow_tags: shelter
 warnings: Avoid sites exposed to falling limbs, rockfall, flooding, avalanche terrain, surf, or fast-changing water.
 source_title: National Park Service - Ten Essentials
 source_url: https://www.nps.gov/articles/10essentials.htm

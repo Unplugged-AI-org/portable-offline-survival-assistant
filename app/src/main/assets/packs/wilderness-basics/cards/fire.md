@@ -3,6 +3,7 @@ id: fire
 title: Fire Readiness
 category: fire
 summary: Carry ignition supplies, know local restrictions, and treat fire as a controlled emergency tool.
+workflow_tags: fire
 warnings: Fire can spread quickly. Do not build or use fire where restrictions, wind, drought, or site conditions make it unsafe.
 source_title: National Park Service - Ten Essentials
 source_url: https://www.nps.gov/articles/10essentials.htm

@@ -69,6 +69,47 @@ class GuidedWorkflowsTest {
     }
 
     @Test
+    fun workflowTagsOverrideTermMatchingForGuideCards() {
+        val workflows = buildGuidedWorkflows(
+            guideState = guideState(
+                guideCard(
+                    id = "water-as-signal",
+                    title = "Water Source Signals",
+                    category = "water",
+                    body = """
+                        ## Field Use
+
+                        - Use this card only in the signal workflow.
+                    """.trimIndent(),
+                    workflowTags = listOf("signal"),
+                ),
+            ),
+            toolsState = toolsState(),
+            mapState = mapState(),
+        )
+
+        assertEquals(
+            listOf("Water Source Signals"),
+            workflows.single { it.id == GuidedWorkflowId.Signal }.guideCards.map { it.card.title },
+        )
+        assertEquals(
+            emptyList<String>(),
+            workflows.single { it.id == GuidedWorkflowId.Water }.guideCards.map { it.card.title },
+        )
+    }
+
+    @Test
+    fun legacyCardsWithoutWorkflowTagsStillUseTermMatching() {
+        val water = buildGuidedWorkflows(
+            guideState = guideState(waterCard()),
+            toolsState = toolsState(),
+            mapState = mapState(),
+        ).single { it.id == GuidedWorkflowId.Water }
+
+        assertEquals(listOf("Water Planning"), water.guideCards.map { it.card.title })
+    }
+
+    @Test
     fun missingWarningsCallOutAbsentLocalContext() {
         val fire = buildGuidedWorkflows(
             guideState = GuideContentState(),
@@ -196,6 +237,7 @@ class GuidedWorkflowsTest {
         title: String,
         category: String,
         body: String,
+        workflowTags: List<String> = emptyList(),
     ): GuideCard = GuideCard(
         id = id,
         packId = "pack",
@@ -208,6 +250,7 @@ class GuidedWorkflowsTest {
         provenanceId = "source-$id",
         createdAtEpochMillis = NOW,
         updatedAtEpochMillis = NOW,
+        workflowTags = workflowTags,
     )
 
     private fun gearItem(

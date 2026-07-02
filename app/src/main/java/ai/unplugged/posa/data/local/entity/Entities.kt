@@ -226,6 +226,7 @@ data class GuideCardEntity(
     @ColumnInfo(name = "provenance_id") val provenanceId: String?,
     @ColumnInfo(name = "created_at_epoch_millis") val createdAtEpochMillis: Long,
     @ColumnInfo(name = "updated_at_epoch_millis") val updatedAtEpochMillis: Long,
+    @ColumnInfo(name = "workflow_tags") val workflowTags: String?,
 )
 
 @Entity(
