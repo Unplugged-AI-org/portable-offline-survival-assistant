@@ -1,7 +1,6 @@
 package ai.unplugged.posa.ui
 
 import ai.unplugged.posa.data.local.PosaDatabase
-import ai.unplugged.posa.data.pack.BundledPackInstaller
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -32,41 +31,25 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ai.unplugged.posa.ui.theme.PosaTheme
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PosaApp(database: PosaDatabase? = null) {
     var selectedDestination by rememberSaveable { mutableStateOf(PosaDestination.Map) }
-    var guidedQuestionQuery by rememberSaveable { mutableStateOf("") }
-    var guideSearchQuery by rememberSaveable { mutableStateOf("") }
-    var selectedGuideCardId by rememberSaveable { mutableStateOf<String?>(null) }
-    var selectedWorkflowId by rememberSaveable { mutableStateOf(GuidedWorkflowId.Water) }
-    var guideContentState by remember {
-        mutableStateOf(GuideContentState(isLoading = database != null))
-    }
-    var bundledGuideInstalled by remember(database) {
-        mutableStateOf(database == null)
-    }
-    val context = LocalContext.current
 
     val toolsViewModel: ToolsViewModel = viewModel(
         factory = ToolsViewModel.factory(database),
@@ -79,13 +62,16 @@ fun PosaApp(database: PosaDatabase? = null) {
     val mapContentState by mapViewModel.state.collectAsState()
     val selectedWaypointId by mapViewModel.selectedWaypointId.collectAsState()
 
-    // Tools content also reflects guide cards, so refresh once the bundled pack
+    // Tools content reflects guide cards, so refresh tools once the bundled pack
     // finishes installing. Temporary seam; see ToolsViewModel.reload docs.
-    LaunchedEffect(bundledGuideInstalled) {
-        if (bundledGuideInstalled) {
-            toolsViewModel.reload()
-        }
-    }
+    val guideViewModel: GuideViewModel = viewModel(
+        factory = GuideViewModel.factory(database) { toolsViewModel.reload() },
+    )
+    val guideContentState by guideViewModel.state.collectAsState()
+    val guidedQuestionQuery by guideViewModel.guidedQuestionQuery.collectAsState()
+    val guideSearchQuery by guideViewModel.guideSearchQuery.collectAsState()
+    val selectedGuideCardId by guideViewModel.selectedGuideCardId.collectAsState()
+    val selectedWorkflowId by guideViewModel.selectedWorkflowId.collectAsState()
 
     val mapActions = MapActions(
         onImportMap = mapViewModel::importMap,
@@ -112,53 +98,6 @@ fun PosaApp(database: PosaDatabase? = null) {
         onUpdateFieldNote = toolsViewModel::updateFieldNote,
         onDeleteFieldNote = toolsViewModel::deleteFieldNote,
     )
-
-    LaunchedEffect(database) {
-        val localDatabase = database
-        if (localDatabase == null) {
-            guideContentState = GuideContentState(
-                errorMessage = "Local guide database is not connected.",
-            )
-            return@LaunchedEffect
-        }
-
-        guideContentState = guideContentState.copy(isLoading = true, errorMessage = null)
-        try {
-            withContext(Dispatchers.IO) {
-                BundledPackInstaller.installAll(context, localDatabase)
-            }
-            bundledGuideInstalled = true
-        } catch (exception: Exception) {
-            bundledGuideInstalled = false
-            guideContentState = guideContentState.copy(
-                isLoading = false,
-                errorMessage = "Bundled guide pack could not be loaded: ${exception.message.orEmpty()}",
-            )
-        }
-    }
-
-    LaunchedEffect(database, bundledGuideInstalled, guideSearchQuery) {
-        val localDatabase = database
-        if (localDatabase == null || !bundledGuideInstalled) {
-            return@LaunchedEffect
-        }
-
-        guideContentState = guideContentState.copy(isLoading = true, errorMessage = null)
-        try {
-            val loadedState = withContext(Dispatchers.IO) {
-                loadGuideContent(localDatabase, guideSearchQuery)
-            }
-            guideContentState = loadedState
-            if (selectedGuideCardId != null && loadedState.cards.none { it.card.id == selectedGuideCardId }) {
-                selectedGuideCardId = null
-            }
-        } catch (exception: Exception) {
-            guideContentState = guideContentState.copy(
-                isLoading = false,
-                errorMessage = "Guide cards could not be loaded: ${exception.message.orEmpty()}",
-            )
-        }
-    }
 
     PosaTheme {
         Scaffold(
@@ -227,14 +166,11 @@ fun PosaApp(database: PosaDatabase? = null) {
                 selectedGuideCardId = selectedGuideCardId,
                 selectedWorkflowId = selectedWorkflowId,
                 selectedWaypointId = selectedWaypointId,
-                onGuidedQuestionChange = { guidedQuestionQuery = it },
-                onGuideSearchChange = {
-                    guideSearchQuery = it
-                    selectedGuideCardId = null
-                },
-                onSelectGuideCard = { selectedGuideCardId = it },
-                onSelectWorkflow = { selectedWorkflowId = it },
-                onBackToGuideList = { selectedGuideCardId = null },
+                onGuidedQuestionChange = guideViewModel::setGuidedQuestion,
+                onGuideSearchChange = guideViewModel::setGuideSearch,
+                onSelectGuideCard = guideViewModel::selectCard,
+                onSelectWorkflow = guideViewModel::selectWorkflow,
+                onBackToGuideList = guideViewModel::clearSelectedCard,
                 onSelectWaypoint = mapViewModel::selectWaypoint,
             )
         }
