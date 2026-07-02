@@ -2,15 +2,11 @@ package ai.unplugged.posa.ui
 
 import ai.unplugged.posa.data.local.PosaDatabase
 import ai.unplugged.posa.data.local.StarterChecklistInstaller
-import ai.unplugged.posa.data.local.InstalledMapImporter
 import ai.unplugged.posa.data.local.repository.repositories
-import ai.unplugged.posa.data.model.BreadcrumbPoint
-import ai.unplugged.posa.data.model.BreadcrumbTrail
 import ai.unplugged.posa.data.model.Checklist
 import ai.unplugged.posa.data.model.ChecklistItem
 import ai.unplugged.posa.data.model.FieldNote
 import ai.unplugged.posa.data.model.GearItem
-import ai.unplugged.posa.data.model.Waypoint
 import ai.unplugged.posa.data.pack.BundledPackInstaller
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -43,12 +39,14 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -60,7 +58,6 @@ import ai.unplugged.posa.ui.theme.PosaTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
 import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -77,17 +74,18 @@ fun PosaApp(database: PosaDatabase? = null) {
     var toolsContentState by remember {
         mutableStateOf(ToolsContentState(isLoading = database != null))
     }
-    var mapContentState by remember {
-        mutableStateOf(MapContentState(isLoading = database != null))
-    }
     var toolsReloadToken by remember { mutableStateOf(0) }
-    var mapReloadToken by remember { mutableStateOf(0) }
-    var selectedWaypointId by rememberSaveable { mutableStateOf<String?>(null) }
     var bundledGuideInstalled by remember(database) {
         mutableStateOf(database == null)
     }
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+
+    val mapViewModel: MapViewModel = viewModel(
+        factory = MapViewModel.factory(database) { toolsReloadToken += 1 },
+    )
+    val mapContentState by mapViewModel.state.collectAsState()
+    val selectedWaypointId by mapViewModel.selectedWaypointId.collectAsState()
 
     fun runToolsMutation(block: suspend (PosaDatabase) -> Unit) {
         val localDatabase = database
@@ -113,168 +111,15 @@ fun PosaApp(database: PosaDatabase? = null) {
         }
     }
 
-    fun runMapMutation(block: suspend (PosaDatabase) -> Unit) {
-        val localDatabase = database
-        if (localDatabase == null) {
-            mapContentState = mapContentState.copy(
-                errorMessage = "Local map database is not connected.",
-            )
-            return
-        }
-
-        coroutineScope.launch {
-            try {
-                withContext(Dispatchers.IO) {
-                    block(localDatabase)
-                }
-                mapReloadToken += 1
-                toolsReloadToken += 1
-            } catch (exception: Exception) {
-                mapContentState = mapContentState.copy(
-                    isLoading = false,
-                    errorMessage = "Map data could not be saved: ${exception.message.orEmpty()}",
-                )
-            }
-        }
-    }
-
     val mapActions = MapActions(
-        onImportMap = { uri ->
-            runMapMutation { localDatabase ->
-                val importedMap = InstalledMapImporter.importFromUri(
-                    context = context.applicationContext,
-                    uri = uri,
-                    id = newLocalId("map-area"),
-                )
-                val installedMaps = localDatabase.repositories().installedMaps
-                installedMaps.list()
-                    .filter { it.isEnabled }
-                    .forEach { enabledMap ->
-                        installedMaps.save(
-                            enabledMap.copy(
-                                isEnabled = false,
-                                updatedAtEpochMillis = System.currentTimeMillis(),
-                            ),
-                        )
-                    }
-                installedMaps.save(importedMap)
-            }
-        },
-        onSetInstalledMapEnabled = { installedMap, isEnabled ->
-            runMapMutation { localDatabase ->
-                val installedMaps = localDatabase.repositories().installedMaps
-                if (isEnabled) {
-                    installedMaps.list()
-                        .filter { it.id != installedMap.id && it.isEnabled }
-                        .forEach { enabledMap ->
-                            installedMaps.save(
-                                enabledMap.copy(
-                                    isEnabled = false,
-                                    updatedAtEpochMillis = System.currentTimeMillis(),
-                                ),
-                            )
-                        }
-                }
-                installedMaps.save(
-                    installedMap.copy(
-                        isEnabled = isEnabled,
-                        updatedAtEpochMillis = System.currentTimeMillis(),
-                    ),
-                )
-            }
-        },
-        onDeleteInstalledMap = { installedMap ->
-            runMapMutation { localDatabase ->
-                File(installedMap.filePath).delete()
-                localDatabase.repositories().installedMaps.delete(installedMap.id)
-            }
-        },
-        onSaveCurrentWaypoint = { name, notes, coordinate ->
-            runMapMutation { localDatabase ->
-                val now = System.currentTimeMillis()
-                localDatabase.repositories().waypoints.save(
-                    Waypoint(
-                        id = newLocalId("waypoint"),
-                        name = name,
-                        latitude = coordinate.latitude,
-                        longitude = coordinate.longitude,
-                        elevationMeters = null,
-                        notes = notes,
-                        createdAtEpochMillis = now,
-                        updatedAtEpochMillis = now,
-                    ),
-                )
-            }
-        },
-        onDeleteWaypoint = { waypoint ->
-            runMapMutation { localDatabase ->
-                localDatabase.repositories().waypoints.delete(waypoint.id)
-            }
-            if (selectedWaypointId == waypoint.id) {
-                selectedWaypointId = null
-            }
-        },
-        onStartBreadcrumb = { coordinate ->
-            runMapMutation { localDatabase ->
-                val repositories = localDatabase.repositories()
-                val now = System.currentTimeMillis()
-                val trailId = newLocalId("breadcrumb-trail")
-                repositories.breadcrumbs.saveTrail(
-                    BreadcrumbTrail(
-                        id = trailId,
-                        name = "Trail ${now.toShortDateTimeLabel()}",
-                        startedAtEpochMillis = now,
-                        endedAtEpochMillis = null,
-                        createdAtEpochMillis = now,
-                        updatedAtEpochMillis = now,
-                    ),
-                )
-                coordinate?.let {
-                    repositories.breadcrumbs.savePoint(
-                        BreadcrumbPoint(
-                            id = newLocalId("breadcrumb-point"),
-                            trailId = trailId,
-                            latitude = it.latitude,
-                            longitude = it.longitude,
-                            accuracyMeters = it.accuracyMeters,
-                            recordedAtEpochMillis = it.recordedAtEpochMillis,
-                            sequenceNumber = 0,
-                        ),
-                    )
-                }
-            }
-        },
-        onStopBreadcrumb = { trail ->
-            runMapMutation { localDatabase ->
-                val now = System.currentTimeMillis()
-                localDatabase.repositories().breadcrumbs.saveTrail(
-                    trail.copy(
-                        endedAtEpochMillis = now,
-                        updatedAtEpochMillis = now,
-                    ),
-                )
-            }
-        },
-        onRecordBreadcrumbPoint = { trail, coordinate ->
-            runMapMutation { localDatabase ->
-                val repositories = localDatabase.repositories()
-                val existingPoints = repositories.breadcrumbs.listPointsForTrail(trail.id)
-                val lastPoint = existingPoints.maxByOrNull { it.sequenceNumber }
-                if (lastPoint == null || lastPoint.recordedAtEpochMillis != coordinate.recordedAtEpochMillis) {
-                    repositories.breadcrumbs.savePoint(
-                        BreadcrumbPoint(
-                            id = newLocalId("breadcrumb-point"),
-                            trailId = trail.id,
-                            latitude = coordinate.latitude,
-                            longitude = coordinate.longitude,
-                            accuracyMeters = coordinate.accuracyMeters,
-                            recordedAtEpochMillis = coordinate.recordedAtEpochMillis,
-                            sequenceNumber = (lastPoint?.sequenceNumber ?: -1) + 1,
-                        ),
-                    )
-                }
-            }
-        },
+        onImportMap = mapViewModel::importMap,
+        onSetInstalledMapEnabled = mapViewModel::setInstalledMapEnabled,
+        onDeleteInstalledMap = mapViewModel::deleteInstalledMap,
+        onSaveCurrentWaypoint = mapViewModel::saveCurrentWaypoint,
+        onDeleteWaypoint = mapViewModel::deleteWaypoint,
+        onStartBreadcrumb = mapViewModel::startBreadcrumb,
+        onStopBreadcrumb = mapViewModel::stopBreadcrumb,
+        onRecordBreadcrumbPoint = mapViewModel::recordBreadcrumbPoint,
     )
 
     val toolsActions = ToolsActions(
@@ -477,32 +322,6 @@ fun PosaApp(database: PosaDatabase? = null) {
         }
     }
 
-    LaunchedEffect(database, mapReloadToken) {
-        val localDatabase = database
-        if (localDatabase == null) {
-            mapContentState = MapContentState(
-                errorMessage = "Local map database is not connected.",
-            )
-            return@LaunchedEffect
-        }
-
-        mapContentState = mapContentState.copy(isLoading = true, errorMessage = null)
-        try {
-            val loadedState = withContext(Dispatchers.IO) {
-                loadMapContent(localDatabase)
-            }
-            mapContentState = loadedState
-            if (selectedWaypointId != null && loadedState.waypoints.none { it.id == selectedWaypointId }) {
-                selectedWaypointId = null
-            }
-        } catch (exception: Exception) {
-            mapContentState = mapContentState.copy(
-                isLoading = false,
-                errorMessage = "Map data could not be loaded: ${exception.message.orEmpty()}",
-            )
-        }
-    }
-
     LaunchedEffect(database, bundledGuideInstalled, guideSearchQuery) {
         val localDatabase = database
         if (localDatabase == null || !bundledGuideInstalled) {
@@ -601,7 +420,7 @@ fun PosaApp(database: PosaDatabase? = null) {
                 onSelectGuideCard = { selectedGuideCardId = it },
                 onSelectWorkflow = { selectedWorkflowId = it },
                 onBackToGuideList = { selectedGuideCardId = null },
-                onSelectWaypoint = { selectedWaypointId = it },
+                onSelectWaypoint = mapViewModel::selectWaypoint,
             )
         }
     }
@@ -765,8 +584,8 @@ private val PosaDestination.icon: ImageVector
         PosaDestination.Packs -> Icons.Outlined.Inventory2
     }
 
-private fun newLocalId(prefix: String): String = "$prefix-${UUID.randomUUID()}"
+internal fun newLocalId(prefix: String): String = "$prefix-${UUID.randomUUID()}"
 
-private fun Long.toShortDateTimeLabel(): String =
+internal fun Long.toShortDateTimeLabel(): String =
     java.time.format.DateTimeFormatter.ofPattern("MMM d h:mm a")
         .format(java.time.Instant.ofEpochMilli(this).atZone(java.time.ZoneId.systemDefault()))
