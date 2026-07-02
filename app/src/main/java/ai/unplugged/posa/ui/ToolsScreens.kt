@@ -831,34 +831,126 @@ private fun FieldNotesTab(
     onDeleteFieldNote: (note: FieldNote) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        FieldNoteEditor(
-            header = "New field note",
-            initialNote = null,
-            state = state,
-            onSave = onCreateFieldNote,
-            onDelete = null,
-        )
+        NewFieldNoteForm(state = state, onCreateFieldNote = onCreateFieldNote)
         if (!state.isLoading && state.fieldNotes.isEmpty()) {
             EmptyToolsText("No field notes are stored locally.")
         }
         state.fieldNotes.forEach { note ->
-            FieldNoteEditor(
-                header = note.title,
-                initialNote = note,
+            FieldNoteCard(
+                note = note,
                 state = state,
-                onSave = { draft -> onUpdateFieldNote(note, draft) },
-                onDelete = { onDeleteFieldNote(note) },
+                onUpdateFieldNote = onUpdateFieldNote,
+                onDeleteFieldNote = onDeleteFieldNote,
             )
         }
     }
 }
 
 @Composable
-private fun FieldNoteEditor(
-    header: String,
+private fun NewFieldNoteForm(
+    state: ToolsContentState,
+    onCreateFieldNote: (draft: FieldNoteDraft) -> Unit,
+) {
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    if (!expanded) {
+        OutlinedButton(
+            onClick = { expanded = true },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.Add,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+            )
+            Text("New field note")
+        }
+        return
+    }
+
+    PanelSurface {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(
+                text = "New field note",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            FieldNoteForm(
+                initialNote = null,
+                state = state,
+                onSubmit = {
+                    onCreateFieldNote(it)
+                    expanded = false
+                },
+                onCancel = { expanded = false },
+                onDelete = null,
+            )
+        }
+    }
+}
+
+@Composable
+private fun FieldNoteCard(
+    note: FieldNote,
+    state: ToolsContentState,
+    onUpdateFieldNote: (note: FieldNote, draft: FieldNoteDraft) -> Unit,
+    onDeleteFieldNote: (note: FieldNote) -> Unit,
+) {
+    var expanded by rememberSaveable(note.id) { mutableStateOf(false) }
+
+    PanelSurface {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded },
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text(
+                        text = note.title.ifBlank { "Untitled note" },
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = note.body.ifBlank { "No body yet" },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.secondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Icon(
+                    imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                    contentDescription = if (expanded) "Collapse note" else "Expand note",
+                )
+            }
+
+            if (expanded) {
+                HorizontalDivider()
+                FieldNoteForm(
+                    initialNote = note,
+                    state = state,
+                    onSubmit = { onUpdateFieldNote(note, it) },
+                    onCancel = null,
+                    onDelete = { onDeleteFieldNote(note) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FieldNoteForm(
     initialNote: FieldNote?,
     state: ToolsContentState,
-    onSave: (FieldNoteDraft) -> Unit,
+    onSubmit: (FieldNoteDraft) -> Unit,
+    onCancel: (() -> Unit)?,
     onDelete: (() -> Unit)?,
 ) {
     val resetKey = initialNote?.id ?: "new-note"
@@ -882,138 +974,144 @@ private fun FieldNoteEditor(
     val guideCardOptions = state.guideCards.map { SelectionOption(it.id, it.title) }
     val gearOptions = state.gear.map { SelectionOption(it.id, it.name) }
 
-    PanelSurface {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(
-                text = header,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+    fun clear() {
+        title = ""
+        body = ""
+        latitude = ""
+        longitude = ""
+        waypointId = null
+        checklistId = null
+        guideCardId = null
+        gearItemId = null
+        formError = null
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        initialNote?.let { note ->
+            MetadataLine("Created", note.createdAtEpochMillis.toDateTimeLabel())
+            MetadataLine("Updated", note.updatedAtEpochMillis.toDateTimeLabel())
+            note.linkLabels(state).forEach { linkLabel ->
+                Text(
+                    text = linkLabel,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.secondary,
+                )
+            }
+        }
+        OutlinedTextField(
+            value = title,
+            onValueChange = { title = it },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            label = { Text("Title") },
+        )
+        OutlinedTextField(
+            value = body,
+            onValueChange = { body = it },
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 4,
+            label = { Text("Body") },
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                value = latitude,
+                onValueChange = { latitude = it },
+                modifier = Modifier.weight(1f),
+                singleLine = true,
+                label = { Text("Latitude") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             )
-            initialNote?.let { note ->
-                MetadataLine("Created", note.createdAtEpochMillis.toDateTimeLabel())
-                MetadataLine("Updated", note.updatedAtEpochMillis.toDateTimeLabel())
-                note.linkLabels(state).forEach { linkLabel ->
-                    Text(
-                        text = linkLabel,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.secondary,
-                    )
+            OutlinedTextField(
+                value = longitude,
+                onValueChange = { longitude = it },
+                modifier = Modifier.weight(1f),
+                singleLine = true,
+                label = { Text("Longitude") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            )
+        }
+        LinkSelector(
+            label = "Waypoint link",
+            selectedId = waypointId,
+            options = waypointOptions,
+            onSelect = { waypointId = it },
+        )
+        LinkSelector(
+            label = "Checklist link",
+            selectedId = checklistId,
+            options = checklistOptions,
+            onSelect = { checklistId = it },
+        )
+        LinkSelector(
+            label = "Guide card link",
+            selectedId = guideCardId,
+            options = guideCardOptions,
+            onSelect = { guideCardId = it },
+        )
+        LinkSelector(
+            label = "Gear link",
+            selectedId = gearItemId,
+            options = gearOptions,
+            onSelect = { gearItemId = it },
+        )
+        formError?.let { ErrorText(it) }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                onClick = {
+                    val coordinateResult = parseOptionalCoordinates(latitude, longitude)
+                    if (title.isBlank()) {
+                        formError = "Title is required."
+                    } else if (body.isBlank()) {
+                        formError = "Body is required."
+                    } else if (coordinateResult is CoordinateResult.Invalid) {
+                        formError = coordinateResult.message
+                    } else {
+                        val coordinates = coordinateResult as CoordinateResult.Valid
+                        formError = null
+                        onSubmit(
+                            FieldNoteDraft(
+                                title = title.trim(),
+                                body = body.trim(),
+                                latitude = coordinates.latitude,
+                                longitude = coordinates.longitude,
+                                waypointId = waypointId,
+                                checklistId = checklistId,
+                                guideCardId = guideCardId,
+                                gearItemId = gearItemId,
+                            ),
+                        )
+                        if (initialNote == null) {
+                            clear()
+                        }
+                    }
+                },
+                enabled = title.isNotBlank() && body.isNotBlank(),
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Save,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+                Text(if (initialNote == null) "Add note" else "Save")
+            }
+            onCancel?.let { cancel ->
+                TextButton(
+                    onClick = {
+                        if (initialNote == null) clear()
+                        cancel()
+                    },
+                ) {
+                    Text("Cancel")
                 }
             }
-            OutlinedTextField(
-                value = title,
-                onValueChange = { title = it },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                label = { Text("Title") },
-            )
-            OutlinedTextField(
-                value = body,
-                onValueChange = { body = it },
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 4,
-                label = { Text("Body") },
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = latitude,
-                    onValueChange = { latitude = it },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true,
-                    label = { Text("Latitude") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                )
-                OutlinedTextField(
-                    value = longitude,
-                    onValueChange = { longitude = it },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true,
-                    label = { Text("Longitude") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                )
-            }
-            LinkSelector(
-                label = "Waypoint link",
-                selectedId = waypointId,
-                options = waypointOptions,
-                onSelect = { waypointId = it },
-            )
-            LinkSelector(
-                label = "Checklist link",
-                selectedId = checklistId,
-                options = checklistOptions,
-                onSelect = { checklistId = it },
-            )
-            LinkSelector(
-                label = "Guide card link",
-                selectedId = guideCardId,
-                options = guideCardOptions,
-                onSelect = { guideCardId = it },
-            )
-            LinkSelector(
-                label = "Gear link",
-                selectedId = gearItemId,
-                options = gearOptions,
-                onSelect = { gearItemId = it },
-            )
-            formError?.let { ErrorText(it) }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = {
-                        val coordinateResult = parseOptionalCoordinates(latitude, longitude)
-                        if (title.isBlank()) {
-                            formError = "Title is required."
-                        } else if (body.isBlank()) {
-                            formError = "Body is required."
-                        } else if (coordinateResult is CoordinateResult.Invalid) {
-                            formError = coordinateResult.message
-                        } else {
-                            val coordinates = coordinateResult as CoordinateResult.Valid
-                            formError = null
-                            onSave(
-                                FieldNoteDraft(
-                                    title = title.trim(),
-                                    body = body.trim(),
-                                    latitude = coordinates.latitude,
-                                    longitude = coordinates.longitude,
-                                    waypointId = waypointId,
-                                    checklistId = checklistId,
-                                    guideCardId = guideCardId,
-                                    gearItemId = gearItemId,
-                                ),
-                            )
-                            if (initialNote == null) {
-                                title = ""
-                                body = ""
-                                latitude = ""
-                                longitude = ""
-                                waypointId = null
-                                checklistId = null
-                                guideCardId = null
-                                gearItemId = null
-                            }
-                        }
-                    },
-                    enabled = title.isNotBlank() && body.isNotBlank(),
-                ) {
+            onDelete?.let { delete ->
+                OutlinedButton(onClick = delete) {
                     Icon(
-                        imageVector = Icons.Outlined.Save,
+                        imageVector = Icons.Outlined.Delete,
                         contentDescription = null,
                         modifier = Modifier.size(18.dp),
                     )
-                    Text("Save")
-                }
-                onDelete?.let { delete ->
-                    OutlinedButton(onClick = delete) {
-                        Icon(
-                            imageVector = Icons.Outlined.Delete,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp),
-                        )
-                        Text("Delete")
-                    }
+                    Text("Delete")
                 }
             }
         }
