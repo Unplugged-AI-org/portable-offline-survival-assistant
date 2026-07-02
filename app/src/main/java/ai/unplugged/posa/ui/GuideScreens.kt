@@ -23,8 +23,15 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -34,7 +41,563 @@ import java.time.Instant
 import java.time.ZoneOffset
 
 @Composable
-internal fun GuideCardsSection(
+internal fun GuideSection(
+    state: GuideContentState,
+    workflows: List<GuidedWorkflowResult>,
+    questionResult: GuidedQuestionResult,
+    question: String,
+    query: String,
+    selectedCardId: String?,
+    selectedWorkflowId: GuidedWorkflowId,
+    onQuestionChange: (String) -> Unit,
+    onQueryChange: (String) -> Unit,
+    onSelectCard: (String) -> Unit,
+    onSelectWorkflow: (GuidedWorkflowId) -> Unit,
+    onBackToList: () -> Unit,
+) {
+    var selectedTabIndex by rememberSaveable { mutableIntStateOf(0) }
+    val tabs = listOf("Ask", "Workflows", "Cards")
+    LaunchedEffect(selectedCardId) {
+        if (selectedCardId != null) {
+            selectedTabIndex = 2
+        }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        StateBanners(state)
+        TabRow(selectedTabIndex = selectedTabIndex) {
+            tabs.forEachIndexed { index, label ->
+                Tab(
+                    selected = selectedTabIndex == index,
+                    onClick = { selectedTabIndex = index },
+                    text = { Text(label) },
+                )
+            }
+        }
+        when (selectedTabIndex) {
+            0 -> GuidedQuestionSection(
+                question = question,
+                result = questionResult,
+                onQuestionChange = onQuestionChange,
+                onOpenGuideCard = { cardId ->
+                    selectedTabIndex = 2
+                    onSelectCard(cardId)
+                },
+            )
+            1 -> GuidedWorkflowsSection(
+                workflows = workflows,
+                selectedWorkflowId = selectedWorkflowId,
+                onSelectWorkflow = onSelectWorkflow,
+                onOpenGuideCard = { cardId ->
+                    selectedTabIndex = 2
+                    onSelectCard(cardId)
+                },
+            )
+            else -> GuideCardsSection(
+                state = state,
+                query = query,
+                selectedCardId = selectedCardId,
+                onQueryChange = onQueryChange,
+                onSelectCard = onSelectCard,
+                onBackToList = onBackToList,
+            )
+        }
+    }
+}
+
+@Composable
+private fun GuidedQuestionSection(
+    question: String,
+    result: GuidedQuestionResult,
+    onQuestionChange: (String) -> Unit,
+    onOpenGuideCard: (String) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        OutlinedTextField(
+            value = question,
+            onValueChange = onQuestionChange,
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = false,
+            minLines = 2,
+            label = { Text("Ask installed packs") },
+            leadingIcon = {
+                Icon(
+                    imageVector = Icons.Outlined.Search,
+                    contentDescription = null,
+                )
+            },
+        )
+        QuestionPromptSuggestions(onQuestionChange)
+        RetrievalStatusPanel(result)
+        if (result.sourceMatches.isNotEmpty()) {
+            RetrievalSourceCards(
+                matches = result.sourceMatches,
+                onOpenGuideCard = onOpenGuideCard,
+            )
+        }
+        RetrievalContextPanel(
+            gearFacts = result.gearFacts,
+            mapFacts = result.mapFacts,
+        )
+    }
+}
+
+@Composable
+private fun QuestionPromptSuggestions(onQuestionChange: (String) -> Unit) {
+    val prompts = listOf(
+        "How should I plan water?",
+        "What can help if I am lost?",
+        "How can I signal from my location?",
+    )
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        prompts.chunked(2).forEach { row ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                row.forEach { prompt ->
+                    Surface(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { onQuestionChange(prompt) },
+                        color = MaterialTheme.colorScheme.surface,
+                        tonalElevation = 1.dp,
+                        shape = RoundedCornerShape(8.dp),
+                    ) {
+                        Text(
+                            text = prompt,
+                            modifier = Modifier.padding(12.dp),
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                }
+                if (row.size == 1) {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RetrievalStatusPanel(result: GuidedQuestionResult) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = if (result.hasQuestion && !result.hasSourceAnswer) {
+            MaterialTheme.colorScheme.errorContainer
+        } else {
+            MaterialTheme.colorScheme.secondaryContainer
+        },
+        contentColor = if (result.hasQuestion && !result.hasSourceAnswer) {
+            MaterialTheme.colorScheme.onErrorContainer
+        } else {
+            MaterialTheme.colorScheme.onSecondaryContainer
+        },
+        shape = RoundedCornerShape(8.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                text = result.statusText,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+            MetadataLine("Confidence", result.confidence.label)
+            Text(
+                text = "No generated medical or survival claims are added beyond installed-source excerpts.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+    }
+}
+
+@Composable
+private fun RetrievalSourceCards(
+    matches: List<GuidedQuestionSourceMatch>,
+    onOpenGuideCard: (String) -> Unit,
+) {
+    WorkflowPanel("Retrieved source cards") {
+        matches.forEach { match ->
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onOpenGuideCard(match.item.card.id) },
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 1.dp,
+                shape = RoundedCornerShape(8.dp),
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        text = match.item.card.title,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = match.excerpt,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    MetadataLine("Confidence", match.confidence.label)
+                    MetadataLine("Matched", match.matchedTerms.joinToString(", "))
+                    MetadataLine("Source", match.item.provenance?.sourceTitle)
+                    MetadataLine("Citation", match.item.provenance?.citation)
+                    MetadataLine("URL", match.item.provenance?.sourceUrl)
+                    MetadataLine("Review", match.item.provenance?.reviewStatus ?: match.item.pack?.reviewStatus)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RetrievalContextPanel(
+    gearFacts: List<String>,
+    mapFacts: List<String>,
+) {
+    if (gearFacts.isEmpty() && mapFacts.isEmpty()) {
+        return
+    }
+
+    WorkflowPanel("Local context") {
+        gearFacts.forEach { fact ->
+            Text(
+                text = "Gear - $fact",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+        mapFacts.forEach { fact ->
+            Text(
+                text = "Map - $fact",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+    }
+}
+
+@Composable
+private fun GuidedWorkflowsSection(
+    workflows: List<GuidedWorkflowResult>,
+    selectedWorkflowId: GuidedWorkflowId,
+    onSelectWorkflow: (GuidedWorkflowId) -> Unit,
+    onOpenGuideCard: (String) -> Unit,
+) {
+    val selectedWorkflow = workflows.firstOrNull { it.id == selectedWorkflowId } ?: workflows.firstOrNull()
+
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        if (workflows.isEmpty()) {
+            EmptyText("No guided workflows can be built until local guide content is loaded.")
+            return
+        }
+        WorkflowSelector(
+            workflows = workflows,
+            selectedWorkflowId = selectedWorkflow?.id,
+            onSelectWorkflow = onSelectWorkflow,
+        )
+        selectedWorkflow?.let {
+            WorkflowDetail(
+                workflow = it,
+                onOpenGuideCard = onOpenGuideCard,
+            )
+        }
+    }
+}
+
+@Composable
+private fun WorkflowSelector(
+    workflows: List<GuidedWorkflowResult>,
+    selectedWorkflowId: GuidedWorkflowId?,
+    onSelectWorkflow: (GuidedWorkflowId) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        workflows.chunked(2).forEach { row ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                row.forEach { workflow ->
+                    Surface(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { onSelectWorkflow(workflow.id) },
+                        color = if (workflow.id == selectedWorkflowId) {
+                            MaterialTheme.colorScheme.primaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.surface
+                        },
+                        contentColor = if (workflow.id == selectedWorkflowId) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        },
+                        tonalElevation = 1.dp,
+                        shape = RoundedCornerShape(8.dp),
+                    ) {
+                        Text(
+                            text = workflow.id.actionLabel,
+                            modifier = Modifier.padding(12.dp),
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                }
+                if (row.size == 1) {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WorkflowDetail(
+    workflow: GuidedWorkflowResult,
+    onOpenGuideCard: (String) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(
+                text = workflow.id.title,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = "Built from installed guide cards, local checklist steps, gear inventory, and saved map context.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+        if (workflow.missingDataWarnings.isNotEmpty()) {
+            MissingDataPanel(workflow.missingDataWarnings)
+        }
+        WorkflowGuideBullets(workflow)
+        WorkflowChecklistSteps(workflow)
+        WorkflowGearContext(workflow)
+        WorkflowLocationContext(workflow.locationFacts)
+        WorkflowSourceLinks(workflow.guideCards, onOpenGuideCard)
+    }
+}
+
+@Composable
+private fun WorkflowGuideBullets(workflow: GuidedWorkflowResult) {
+    WorkflowPanel("Source-backed steps") {
+        if (workflow.guideBullets.isEmpty()) {
+            EmptyText("No guide-card steps are available for this workflow.")
+        }
+        workflow.guideBullets.forEach { bullet ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Text("-", style = MaterialTheme.typography.bodyMedium)
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text(
+                        text = bullet.text,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Text(
+                        text = "Source: ${bullet.sourceCard.title}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.secondary,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WorkflowChecklistSteps(workflow: GuidedWorkflowResult) {
+    WorkflowPanel("Matching checklist steps") {
+        if (workflow.checklistSteps.isEmpty()) {
+            EmptyText("No matching local checklist items.")
+        }
+        workflow.checklistSteps.forEach { step ->
+            val status = if (step.item.isChecked) "Done" else "Open"
+            Text(
+                text = "$status - ${step.item.label}",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = step.checklistTitle,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.secondary,
+            )
+            step.item.details?.let { details ->
+                Text(
+                    text = details,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun WorkflowGearContext(workflow: GuidedWorkflowResult) {
+    WorkflowPanel("Gear context") {
+        if (workflow.availableGear.isEmpty() && workflow.missingGear.isEmpty()) {
+            EmptyText("No matching gear inventory items.")
+        }
+        workflow.availableGear.forEach { item ->
+            GearLine("Have", item)
+        }
+        workflow.missingGear.forEach { item ->
+            GearLine("Missing", item)
+        }
+    }
+}
+
+@Composable
+private fun GearLine(
+    status: String,
+    item: ai.unplugged.posa.data.model.GearItem,
+) {
+    Text(
+        text = "$status - ${item.name} x${item.quantity}",
+        style = MaterialTheme.typography.bodyMedium,
+        fontWeight = FontWeight.SemiBold,
+    )
+    item.category?.let { category ->
+        Text(
+            text = category,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.secondary,
+        )
+    }
+    item.notes?.let { notes ->
+        Text(
+            text = notes,
+            style = MaterialTheme.typography.bodySmall,
+        )
+    }
+}
+
+@Composable
+private fun WorkflowLocationContext(locationFacts: List<String>) {
+    WorkflowPanel("Location context") {
+        if (locationFacts.isEmpty()) {
+            EmptyText("No saved map context is attached to this workflow.")
+        }
+        locationFacts.forEach { fact ->
+            Text(
+                text = fact,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+    }
+}
+
+@Composable
+private fun WorkflowSourceLinks(
+    guideCards: List<GuideCardItem>,
+    onOpenGuideCard: (String) -> Unit,
+) {
+    WorkflowPanel("Sources") {
+        if (guideCards.isEmpty()) {
+            EmptyText("No source cards attached.")
+        }
+        guideCards.forEach { item ->
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onOpenGuideCard(item.card.id) },
+                color = MaterialTheme.colorScheme.surface,
+                shape = RoundedCornerShape(8.dp),
+                tonalElevation = 1.dp,
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        text = item.card.title,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    MetadataLine("Source", item.provenance?.sourceTitle)
+                    MetadataLine("Citation", item.provenance?.citation)
+                    MetadataLine("URL", item.provenance?.sourceUrl)
+                    MetadataLine("Review", item.provenance?.reviewStatus ?: item.pack?.reviewStatus)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MissingDataPanel(warnings: List<String>) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.errorContainer,
+        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        shape = RoundedCornerShape(8.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.WarningAmber,
+                    contentDescription = null,
+                    modifier = Modifier.size(22.dp),
+                )
+                Text(
+                    text = "Missing local data",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+            warnings.forEach { warning ->
+                Text(
+                    text = warning,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun WorkflowPanel(
+    title: String,
+    content: @Composable () -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 1.dp,
+        shape = RoundedCornerShape(8.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            content()
+        }
+    }
+}
+
+@Composable
+private fun GuideCardsSection(
     state: GuideContentState,
     query: String,
     selectedCardId: String?,
@@ -43,7 +606,6 @@ internal fun GuideCardsSection(
     onBackToList: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        StateBanners(state)
         OutlinedTextField(
             value = query,
             onValueChange = onQueryChange,

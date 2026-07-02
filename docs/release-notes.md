@@ -1,5 +1,37 @@
 # Release Notes
 
+## Phase 8 Complete - Retrieval and RAG v1
+
+Implemented:
+
+- Guide tab "Ask" mode with a query interface over installed guide packs
+- ranked, cited source-card excerpts with matched terms and confidence (low/medium/high)
+- "I do not know from installed sources" behavior when no installed source matches
+- confidence and provenance UI (source, citation, URL, review status) on each result
+- gear inventory (have/missing) and saved map context (enabled areas, waypoints, breadcrumbs) folded into retrieval context where relevant
+- retrieval tests for cited excerpts, unknown-question handling, and gear/map context inclusion
+
+Known limitation:
+
+- Retrieval is deterministic keyword/provenance scoring over installed sources only; there is no generation, embeddings, semantic search, or remote data.
+- No generated medical or survival advice is added beyond installed-source excerpts.
+- Optional local model support and semantic search remain later-phase work.
+
+## Phase 7 Complete - Guided Workflows
+
+Implemented:
+
+- Guide tab workflow mode for water, lost, shelter, fire, signaling, and battery conservation
+- deterministic workflow composition from installed guide cards, local checklist steps, gear inventory, and saved map context
+- source-backed guide-card bullets with links back to full card provenance
+- have/missing gear context and open/done checklist context in each workflow
+- missing-data warnings when source cards, checklist steps, gear, or location context are unavailable
+- workflow composition tests for source matching, search-filter independence, and missing-data warnings
+
+Known limitation:
+
+- Workflows do not generate new advice, fetch remote data, route on maps, or infer current GPS outside the Map tab.
+
 ## Phase 6 Complete - User-Loaded Map Areas
 
 Implemented:

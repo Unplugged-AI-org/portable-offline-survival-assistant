@@ -67,8 +67,10 @@ import java.util.UUID
 @Composable
 fun PosaApp(database: PosaDatabase? = null) {
     var selectedDestination by rememberSaveable { mutableStateOf(PosaDestination.Map) }
+    var guidedQuestionQuery by rememberSaveable { mutableStateOf("") }
     var guideSearchQuery by rememberSaveable { mutableStateOf("") }
     var selectedGuideCardId by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedWorkflowId by rememberSaveable { mutableStateOf(GuidedWorkflowId.Water) }
     var guideContentState by remember {
         mutableStateOf(GuideContentState(isLoading = database != null))
     }
@@ -571,18 +573,33 @@ fun PosaApp(database: PosaDatabase? = null) {
                 destination = selectedDestination,
                 contentPadding = innerPadding,
                 guideContentState = guideContentState,
+                guidedWorkflows = buildGuidedWorkflows(
+                    guideState = guideContentState,
+                    toolsState = toolsContentState,
+                    mapState = mapContentState,
+                ),
+                guidedQuestionResult = answerGuidedQuestion(
+                    guideState = guideContentState,
+                    toolsState = toolsContentState,
+                    mapState = mapContentState,
+                    question = guidedQuestionQuery,
+                ),
                 mapContentState = mapContentState,
                 toolsContentState = toolsContentState,
                 mapActions = mapActions,
                 toolsActions = toolsActions,
+                guidedQuestionQuery = guidedQuestionQuery,
                 guideSearchQuery = guideSearchQuery,
                 selectedGuideCardId = selectedGuideCardId,
+                selectedWorkflowId = selectedWorkflowId,
                 selectedWaypointId = selectedWaypointId,
+                onGuidedQuestionChange = { guidedQuestionQuery = it },
                 onGuideSearchChange = {
                     guideSearchQuery = it
                     selectedGuideCardId = null
                 },
                 onSelectGuideCard = { selectedGuideCardId = it },
+                onSelectWorkflow = { selectedWorkflowId = it },
                 onBackToGuideList = { selectedGuideCardId = null },
                 onSelectWaypoint = { selectedWaypointId = it },
             )
@@ -595,15 +612,21 @@ private fun DestinationScreen(
     destination: PosaDestination,
     contentPadding: PaddingValues,
     guideContentState: GuideContentState,
+    guidedWorkflows: List<GuidedWorkflowResult>,
+    guidedQuestionResult: GuidedQuestionResult,
     mapContentState: MapContentState,
     toolsContentState: ToolsContentState,
     mapActions: MapActions,
     toolsActions: ToolsActions,
+    guidedQuestionQuery: String,
     guideSearchQuery: String,
     selectedGuideCardId: String?,
+    selectedWorkflowId: GuidedWorkflowId,
     selectedWaypointId: String?,
+    onGuidedQuestionChange: (String) -> Unit,
     onGuideSearchChange: (String) -> Unit,
     onSelectGuideCard: (String) -> Unit,
+    onSelectWorkflow: (GuidedWorkflowId) -> Unit,
     onBackToGuideList: () -> Unit,
     onSelectWaypoint: (String?) -> Unit,
 ) {
@@ -623,12 +646,18 @@ private fun DestinationScreen(
             DestinationHeader(destination)
             OfflineStatus(destination.offlineState)
             when (destination) {
-                PosaDestination.Guide -> GuideCardsSection(
+                PosaDestination.Guide -> GuideSection(
                     state = guideContentState,
+                    workflows = guidedWorkflows,
+                    questionResult = guidedQuestionResult,
+                    question = guidedQuestionQuery,
                     query = guideSearchQuery,
                     selectedCardId = selectedGuideCardId,
+                    selectedWorkflowId = selectedWorkflowId,
+                    onQuestionChange = onGuidedQuestionChange,
                     onQueryChange = onGuideSearchChange,
                     onSelectCard = onSelectGuideCard,
+                    onSelectWorkflow = onSelectWorkflow,
                     onBackToList = onBackToGuideList,
                 )
                 PosaDestination.Packs -> PacksSection(guideContentState)
