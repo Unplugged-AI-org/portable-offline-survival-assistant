@@ -54,49 +54,14 @@ fun PosaApp(database: PosaDatabase? = null) {
     val toolsViewModel: ToolsViewModel = viewModel(
         factory = ToolsViewModel.factory(database),
     )
-    val toolsContentState by toolsViewModel.state.collectAsState()
 
+    // Tools content reflects guide cards and waypoints owned by the other VMs, so
+    // both wire a reload seam to refresh tools after their mutations/install.
     val mapViewModel: MapViewModel = viewModel(
         factory = MapViewModel.factory(database) { toolsViewModel.reload() },
     )
-    val mapContentState by mapViewModel.state.collectAsState()
-    val selectedWaypointId by mapViewModel.selectedWaypointId.collectAsState()
-
-    // Tools content reflects guide cards, so refresh tools once the bundled pack
-    // finishes installing. Temporary seam; see ToolsViewModel.reload docs.
     val guideViewModel: GuideViewModel = viewModel(
         factory = GuideViewModel.factory(database) { toolsViewModel.reload() },
-    )
-    val guideContentState by guideViewModel.state.collectAsState()
-    val guidedQuestionQuery by guideViewModel.guidedQuestionQuery.collectAsState()
-    val guideSearchQuery by guideViewModel.guideSearchQuery.collectAsState()
-    val selectedGuideCardId by guideViewModel.selectedGuideCardId.collectAsState()
-    val selectedWorkflowId by guideViewModel.selectedWorkflowId.collectAsState()
-
-    val mapActions = MapActions(
-        onImportMap = mapViewModel::importMap,
-        onSetInstalledMapEnabled = mapViewModel::setInstalledMapEnabled,
-        onDeleteInstalledMap = mapViewModel::deleteInstalledMap,
-        onSaveCurrentWaypoint = mapViewModel::saveCurrentWaypoint,
-        onDeleteWaypoint = mapViewModel::deleteWaypoint,
-        onStartBreadcrumb = mapViewModel::startBreadcrumb,
-        onStopBreadcrumb = mapViewModel::stopBreadcrumb,
-        onRecordBreadcrumbPoint = mapViewModel::recordBreadcrumbPoint,
-    )
-
-    val toolsActions = ToolsActions(
-        onCreateChecklist = toolsViewModel::createChecklist,
-        onUpdateChecklist = toolsViewModel::updateChecklist,
-        onDeleteChecklist = toolsViewModel::deleteChecklist,
-        onCreateChecklistItem = toolsViewModel::createChecklistItem,
-        onUpdateChecklistItem = toolsViewModel::updateChecklistItem,
-        onDeleteChecklistItem = toolsViewModel::deleteChecklistItem,
-        onCreateGearItem = toolsViewModel::createGearItem,
-        onUpdateGearItem = toolsViewModel::updateGearItem,
-        onDeleteGearItem = toolsViewModel::deleteGearItem,
-        onCreateFieldNote = toolsViewModel::createFieldNote,
-        onUpdateFieldNote = toolsViewModel::updateFieldNote,
-        onDeleteFieldNote = toolsViewModel::deleteFieldNote,
     )
 
     PosaTheme {
@@ -145,33 +110,9 @@ fun PosaApp(database: PosaDatabase? = null) {
             DestinationScreen(
                 destination = selectedDestination,
                 contentPadding = innerPadding,
-                guideContentState = guideContentState,
-                guidedWorkflows = buildGuidedWorkflows(
-                    guideState = guideContentState,
-                    toolsState = toolsContentState,
-                    mapState = mapContentState,
-                ),
-                guidedQuestionResult = answerGuidedQuestion(
-                    guideState = guideContentState,
-                    toolsState = toolsContentState,
-                    mapState = mapContentState,
-                    question = guidedQuestionQuery,
-                ),
-                mapContentState = mapContentState,
-                toolsContentState = toolsContentState,
-                mapActions = mapActions,
-                toolsActions = toolsActions,
-                guidedQuestionQuery = guidedQuestionQuery,
-                guideSearchQuery = guideSearchQuery,
-                selectedGuideCardId = selectedGuideCardId,
-                selectedWorkflowId = selectedWorkflowId,
-                selectedWaypointId = selectedWaypointId,
-                onGuidedQuestionChange = guideViewModel::setGuidedQuestion,
-                onGuideSearchChange = guideViewModel::setGuideSearch,
-                onSelectGuideCard = guideViewModel::selectCard,
-                onSelectWorkflow = guideViewModel::selectWorkflow,
-                onBackToGuideList = guideViewModel::clearSelectedCard,
-                onSelectWaypoint = mapViewModel::selectWaypoint,
+                guideViewModel = guideViewModel,
+                toolsViewModel = toolsViewModel,
+                mapViewModel = mapViewModel,
             )
         }
     }
@@ -181,24 +122,9 @@ fun PosaApp(database: PosaDatabase? = null) {
 private fun DestinationScreen(
     destination: PosaDestination,
     contentPadding: PaddingValues,
-    guideContentState: GuideContentState,
-    guidedWorkflows: List<GuidedWorkflowResult>,
-    guidedQuestionResult: GuidedQuestionResult,
-    mapContentState: MapContentState,
-    toolsContentState: ToolsContentState,
-    mapActions: MapActions,
-    toolsActions: ToolsActions,
-    guidedQuestionQuery: String,
-    guideSearchQuery: String,
-    selectedGuideCardId: String?,
-    selectedWorkflowId: GuidedWorkflowId,
-    selectedWaypointId: String?,
-    onGuidedQuestionChange: (String) -> Unit,
-    onGuideSearchChange: (String) -> Unit,
-    onSelectGuideCard: (String) -> Unit,
-    onSelectWorkflow: (GuidedWorkflowId) -> Unit,
-    onBackToGuideList: () -> Unit,
-    onSelectWaypoint: (String?) -> Unit,
+    guideViewModel: GuideViewModel,
+    toolsViewModel: ToolsViewModel,
+    mapViewModel: MapViewModel,
 ) {
     Surface(
         modifier = Modifier
@@ -216,34 +142,104 @@ private fun DestinationScreen(
             DestinationHeader(destination)
             OfflineStatus(destination.offlineState)
             when (destination) {
-                PosaDestination.Guide -> GuideSection(
-                    state = guideContentState,
-                    workflows = guidedWorkflows,
-                    questionResult = guidedQuestionResult,
-                    question = guidedQuestionQuery,
-                    query = guideSearchQuery,
-                    selectedCardId = selectedGuideCardId,
-                    selectedWorkflowId = selectedWorkflowId,
-                    onQuestionChange = onGuidedQuestionChange,
-                    onQueryChange = onGuideSearchChange,
-                    onSelectCard = onSelectGuideCard,
-                    onSelectWorkflow = onSelectWorkflow,
-                    onBackToList = onBackToGuideList,
+                PosaDestination.Guide -> GuideDestination(
+                    guideViewModel = guideViewModel,
+                    toolsViewModel = toolsViewModel,
+                    mapViewModel = mapViewModel,
                 )
-                PosaDestination.Packs -> PacksSection(guideContentState)
-                PosaDestination.Tools -> ToolsSection(
-                    state = toolsContentState,
-                    actions = toolsActions,
-                )
-                PosaDestination.Map -> MapSection(
-                    state = mapContentState,
-                    selectedWaypointId = selectedWaypointId,
-                    onSelectWaypoint = onSelectWaypoint,
-                    actions = mapActions,
-                )
+                PosaDestination.Packs -> {
+                    val guideContentState by guideViewModel.state.collectAsState()
+                    PacksSection(guideContentState)
+                }
+                PosaDestination.Tools -> ToolsDestination(toolsViewModel)
+                PosaDestination.Map -> MapDestination(mapViewModel)
             }
         }
     }
+}
+
+@Composable
+private fun GuideDestination(
+    guideViewModel: GuideViewModel,
+    toolsViewModel: ToolsViewModel,
+    mapViewModel: MapViewModel,
+) {
+    // The Guide tab aggregates all three domains: workflows and answers are derived
+    // from guide + tools + map state together.
+    val guideContentState by guideViewModel.state.collectAsState()
+    val toolsContentState by toolsViewModel.state.collectAsState()
+    val mapContentState by mapViewModel.state.collectAsState()
+    val guidedQuestionQuery by guideViewModel.guidedQuestionQuery.collectAsState()
+    val guideSearchQuery by guideViewModel.guideSearchQuery.collectAsState()
+    val selectedGuideCardId by guideViewModel.selectedGuideCardId.collectAsState()
+    val selectedWorkflowId by guideViewModel.selectedWorkflowId.collectAsState()
+
+    GuideSection(
+        state = guideContentState,
+        workflows = buildGuidedWorkflows(
+            guideState = guideContentState,
+            toolsState = toolsContentState,
+            mapState = mapContentState,
+        ),
+        questionResult = answerGuidedQuestion(
+            guideState = guideContentState,
+            toolsState = toolsContentState,
+            mapState = mapContentState,
+            question = guidedQuestionQuery,
+        ),
+        question = guidedQuestionQuery,
+        query = guideSearchQuery,
+        selectedCardId = selectedGuideCardId,
+        selectedWorkflowId = selectedWorkflowId,
+        onQuestionChange = guideViewModel::setGuidedQuestion,
+        onQueryChange = guideViewModel::setGuideSearch,
+        onSelectCard = guideViewModel::selectCard,
+        onSelectWorkflow = guideViewModel::selectWorkflow,
+        onBackToList = guideViewModel::clearSelectedCard,
+    )
+}
+
+@Composable
+private fun ToolsDestination(toolsViewModel: ToolsViewModel) {
+    val toolsContentState by toolsViewModel.state.collectAsState()
+    ToolsSection(
+        state = toolsContentState,
+        actions = ToolsActions(
+            onCreateChecklist = toolsViewModel::createChecklist,
+            onUpdateChecklist = toolsViewModel::updateChecklist,
+            onDeleteChecklist = toolsViewModel::deleteChecklist,
+            onCreateChecklistItem = toolsViewModel::createChecklistItem,
+            onUpdateChecklistItem = toolsViewModel::updateChecklistItem,
+            onDeleteChecklistItem = toolsViewModel::deleteChecklistItem,
+            onCreateGearItem = toolsViewModel::createGearItem,
+            onUpdateGearItem = toolsViewModel::updateGearItem,
+            onDeleteGearItem = toolsViewModel::deleteGearItem,
+            onCreateFieldNote = toolsViewModel::createFieldNote,
+            onUpdateFieldNote = toolsViewModel::updateFieldNote,
+            onDeleteFieldNote = toolsViewModel::deleteFieldNote,
+        ),
+    )
+}
+
+@Composable
+private fun MapDestination(mapViewModel: MapViewModel) {
+    val mapContentState by mapViewModel.state.collectAsState()
+    val selectedWaypointId by mapViewModel.selectedWaypointId.collectAsState()
+    MapSection(
+        state = mapContentState,
+        selectedWaypointId = selectedWaypointId,
+        onSelectWaypoint = mapViewModel::selectWaypoint,
+        actions = MapActions(
+            onImportMap = mapViewModel::importMap,
+            onSetInstalledMapEnabled = mapViewModel::setInstalledMapEnabled,
+            onDeleteInstalledMap = mapViewModel::deleteInstalledMap,
+            onSaveCurrentWaypoint = mapViewModel::saveCurrentWaypoint,
+            onDeleteWaypoint = mapViewModel::deleteWaypoint,
+            onStartBreadcrumb = mapViewModel::startBreadcrumb,
+            onStopBreadcrumb = mapViewModel::stopBreadcrumb,
+            onRecordBreadcrumbPoint = mapViewModel::recordBreadcrumbPoint,
+        ),
+    )
 }
 
 @Composable
