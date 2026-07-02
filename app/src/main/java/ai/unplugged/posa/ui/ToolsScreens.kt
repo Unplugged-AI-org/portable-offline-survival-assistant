@@ -19,6 +19,7 @@ import androidx.compose.material.icons.outlined.ArrowDropDown
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.Notes
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -47,6 +48,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -449,59 +451,95 @@ private fun ChecklistItemRow(
     onUpdateChecklistItem: (item: ChecklistItem, label: String, details: String?, isChecked: Boolean) -> Unit,
     onDeleteChecklistItem: (item: ChecklistItem) -> Unit,
 ) {
+    var expanded by rememberSaveable(item.id) { mutableStateOf(false) }
     var label by rememberSaveable(item.id, item.updatedAtEpochMillis) { mutableStateOf(item.label) }
     var details by rememberSaveable(item.id, item.updatedAtEpochMillis) { mutableStateOf(item.details.orEmpty()) }
     var isChecked by rememberSaveable(item.id, item.updatedAtEpochMillis) { mutableStateOf(item.isChecked) }
+    val hasDetails = !item.details.isNullOrBlank()
 
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.Top,
-    ) {
-        Checkbox(
-            checked = isChecked,
-            onCheckedChange = { checked ->
-                isChecked = checked
-                onUpdateChecklistItem(item, label.trim(), details.trim().blankToNull(), checked)
-            },
-        )
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { expanded = !expanded },
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            OutlinedTextField(
-                value = label,
-                onValueChange = { label = it },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                label = { Text("Item") },
+            Checkbox(
+                checked = isChecked,
+                onCheckedChange = { checked ->
+                    isChecked = checked
+                    onUpdateChecklistItem(item, label.trim(), details.trim().blankToNull(), checked)
+                },
             )
-            OutlinedTextField(
-                value = details,
-                onValueChange = { details = it },
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 1,
-                label = { Text("Details") },
+            Text(
+                text = item.label.ifBlank { "Untitled item" },
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodyLarge,
+                textDecoration = if (isChecked) TextDecoration.LineThrough else null,
+                color = if (isChecked) {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                },
+                maxLines = if (expanded) Int.MAX_VALUE else 1,
+                overflow = TextOverflow.Ellipsis,
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                OutlinedButton(
-                    onClick = {
-                        onUpdateChecklistItem(item, label.trim(), details.trim().blankToNull(), isChecked)
-                    },
-                    enabled = label.isNotBlank(),
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Save,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Text("Save")
-                }
-                IconButton(onClick = { onDeleteChecklistItem(item) }) {
-                    Icon(
-                        imageVector = Icons.Outlined.Delete,
-                        contentDescription = "Delete checklist item",
-                    )
+            if (hasDetails && !expanded) {
+                Icon(
+                    imageVector = Icons.Outlined.Notes,
+                    contentDescription = "Has details",
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Icon(
+                imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                contentDescription = if (expanded) "Collapse item" else "Expand item",
+            )
+        }
+
+        if (expanded) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 8.dp, bottom = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedTextField(
+                    value = label,
+                    onValueChange = { label = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text("Item") },
+                )
+                OutlinedTextField(
+                    value = details,
+                    onValueChange = { details = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 1,
+                    label = { Text("Details") },
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OutlinedButton(
+                        onClick = {
+                            onUpdateChecklistItem(item, label.trim(), details.trim().blankToNull(), isChecked)
+                        },
+                        enabled = label.isNotBlank(),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Save,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Text("Save")
+                    }
+                    IconButton(onClick = { onDeleteChecklistItem(item) }) {
+                        Icon(
+                            imageVector = Icons.Outlined.Delete,
+                            contentDescription = "Delete checklist item",
+                        )
+                    }
                 }
             }
         }
