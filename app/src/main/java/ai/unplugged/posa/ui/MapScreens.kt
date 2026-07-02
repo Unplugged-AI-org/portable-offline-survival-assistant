@@ -6,6 +6,13 @@ import ai.unplugged.posa.data.model.Waypoint
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Path
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
@@ -35,6 +42,7 @@ import androidx.compose.material.icons.outlined.FileOpen
 import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.Menu
+import androidx.compose.material.icons.outlined.MyLocation
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Save
@@ -63,17 +71,22 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import org.mapsforge.core.graphics.Style
 import org.mapsforge.core.model.LatLong
+import org.mapsforge.map.android.graphics.AndroidBitmap
 import org.mapsforge.map.android.graphics.AndroidGraphicFactory
 import org.mapsforge.map.android.util.AndroidUtil
 import org.mapsforge.map.android.view.MapView
 import org.mapsforge.map.datastore.MapDataStore
 import org.mapsforge.map.layer.cache.TileCache
+import org.mapsforge.map.layer.overlay.Circle
+import org.mapsforge.map.layer.overlay.Marker
 import org.mapsforge.map.layer.renderer.TileRendererLayer
 import org.mapsforge.map.reader.MapFile
 import org.mapsforge.map.rendertheme.internal.MapsforgeThemes
@@ -116,6 +129,7 @@ internal fun MapSection(
             context.hasLocationPermission()
     }
     val currentLocation = rememberCurrentLocation(hasLocationPermission)
+    val headingDegrees = rememberDeviceHeading(hasLocationPermission)
     val selectedWaypoint = state.waypoints.firstOrNull { it.id == selectedWaypointId }
     val activeTrail = state.activeTrail
     val mapImportLauncher = rememberLauncherForActivityResult(
@@ -139,6 +153,8 @@ internal fun MapSection(
         MapsforgeMapSurface(
             activeInstalledMap = state.activeInstalledMap,
             selectedWaypoint = selectedWaypoint,
+            currentLocation = currentLocation,
+            headingDegrees = headingDegrees,
             modifier = Modifier.fillMaxSize(),
         )
 
@@ -236,13 +252,17 @@ private fun MapMenuButton(onClick: () -> Unit) {
 private fun MapsforgeMapSurface(
     activeInstalledMap: InstalledMap?,
     selectedWaypoint: Waypoint?,
+    currentLocation: FieldCoordinate?,
+    headingDegrees: Float?,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val density = LocalDensity.current.density
     var mapFile by remember { mutableStateOf<File?>(null) }
     var mapError by remember { mutableStateOf<String?>(null) }
     var appliedViewportKey by remember { mutableStateOf<String?>(null) }
     val mapViewHolder = remember { mutableStateOf<MapView?>(null) }
+    val locationOverlay = remember { LocationOverlay() }
     val viewport = activeInstalledMap?.viewport() ?: MapViewport(
         center = selectedWaypoint?.toFieldCoordinate() ?: MONACO_CENTER,
         zoomLevel = DEFAULT_MAP_ZOOM,
@@ -315,6 +335,7 @@ private fun MapsforgeMapSurface(
                                 mapView.moveTo(viewport)
                                 appliedViewportKey = viewport.key
                             }
+                            locationOverlay.update(mapView, currentLocation, headingDegrees, density)
                         },
                     )
                 }
@@ -332,6 +353,28 @@ private fun MapsforgeMapSurface(
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                     style = MaterialTheme.typography.labelSmall,
                 )
+            }
+            if (currentLocation != null) {
+                Surface(
+                    onClick = {
+                        mapViewHolder.value?.setCenter(
+                            LatLong(currentLocation.latitude, currentLocation.longitude),
+                        )
+                    },
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(16.dp),
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+                    contentColor = MaterialTheme.colorScheme.primary,
+                    shadowElevation = 4.dp,
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.MyLocation,
+                        contentDescription = "Center on my location",
+                        modifier = Modifier.padding(12.dp),
+                    )
+                }
             }
         }
     }
@@ -848,6 +891,190 @@ private fun rememberCurrentLocation(enabled: Boolean): FieldCoordinate? {
     return currentLocation
 }
 
+/**
+ * Compass heading in degrees clockwise from magnetic north, from the rotation-vector
+ * sensor. Null when disabled or the device has no such sensor. Updates only past a
+ * small angular threshold to limit recomposition churn. This is a facing indicator,
+ * not survey-grade: it reads magnetic north and assumes a roughly upright device.
+ */
+@Composable
+private fun rememberDeviceHeading(enabled: Boolean): Float? {
+    val context = LocalContext.current
+    var heading by remember { mutableStateOf<Float?>(null) }
+
+    DisposableEffect(context, enabled) {
+        if (!enabled) {
+            return@DisposableEffect onDispose {}
+        }
+        val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
+        val rotationSensor = sensorManager?.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
+        if (sensorManager == null || rotationSensor == null) {
+            return@DisposableEffect onDispose {}
+        }
+
+        val rotationMatrix = FloatArray(9)
+        val orientation = FloatArray(3)
+        val listener = object : SensorEventListener {
+            override fun onSensorChanged(event: SensorEvent) {
+                SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values)
+                SensorManager.getOrientation(rotationMatrix, orientation)
+                var degrees = Math.toDegrees(orientation[0].toDouble()).toFloat()
+                if (degrees < 0f) degrees += 360f
+                val previous = heading
+                if (previous == null ||
+                    angularDistanceDegrees(previous, degrees) >= HEADING_UPDATE_THRESHOLD_DEGREES
+                ) {
+                    heading = degrees
+                }
+            }
+
+            override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
+        }
+
+        sensorManager.registerListener(listener, rotationSensor, SensorManager.SENSOR_DELAY_UI)
+        onDispose { sensorManager.unregisterListener(listener) }
+    }
+
+    return heading
+}
+
+private fun angularDistanceDegrees(a: Float, b: Float): Float {
+    val diff = kotlin.math.abs(a - b) % 360f
+    return if (diff > 180f) 360f - diff else diff
+}
+
+/**
+ * Manages the current-location layers on a Mapsforge [MapView]: an accuracy [Circle]
+ * beneath a position [Marker] (blue dot + white ring, with a heading cone when a
+ * compass fix is available). Driven from the AndroidView update pass; rebuilds the
+ * marker bitmap when the position/accuracy/heading bucket changes.
+ */
+private class LocationOverlay {
+    private var marker: Marker? = null
+    private var circle: Circle? = null
+    private var appliedKey: String? = null
+
+    fun update(mapView: MapView, location: FieldCoordinate?, headingDegrees: Float?, density: Float) {
+        if (location == null) {
+            clear(mapView)
+            return
+        }
+        val key = overlayKey(location, headingDegrees)
+        if (key == appliedKey) return
+
+        val layers = mapView.layerManager.layers
+        val latLong = LatLong(location.latitude, location.longitude)
+
+        val accuracy = location.accuracyMeters?.toFloat()
+        if (accuracy != null && accuracy > 0f) {
+            val existing = circle
+            if (existing == null) {
+                val newCircle = Circle(latLong, accuracy, accuracyFillPaint(), accuracyStrokePaint(density))
+                circle = newCircle
+                layers.add(newCircle)
+            } else {
+                existing.setLatLong(latLong)
+                existing.setRadius(accuracy)
+            }
+        } else {
+            circle?.let { layers.remove(it); it.onDestroy() }
+            circle = null
+        }
+
+        // Rebuild + re-add the marker so heading rotation is reflected and the old
+        // native bitmap is released; keeps it above the accuracy circle.
+        val bitmap = AndroidBitmap(buildLocationBitmap(density, headingDegrees))
+        marker?.let { layers.remove(it); it.onDestroy() }
+        val newMarker = Marker(latLong, bitmap, 0, 0)
+        marker = newMarker
+        layers.add(newMarker)
+
+        appliedKey = key
+        mapView.layerManager.redrawLayers()
+    }
+
+    private fun clear(mapView: MapView) {
+        if (marker == null && circle == null) return
+        val layers = mapView.layerManager.layers
+        marker?.let { layers.remove(it); it.onDestroy() }
+        circle?.let { layers.remove(it); it.onDestroy() }
+        marker = null
+        circle = null
+        appliedKey = null
+        mapView.layerManager.redrawLayers()
+    }
+
+    private fun overlayKey(location: FieldCoordinate, headingDegrees: Float?): String {
+        val headingBucket = headingDegrees?.let { (it / HEADING_UPDATE_THRESHOLD_DEGREES).toInt() }
+        return "${location.latitude}:${location.longitude}:${location.accuracyMeters}:$headingBucket"
+    }
+}
+
+private fun buildLocationBitmap(density: Float, headingDegrees: Float?): android.graphics.Bitmap {
+    val size = (44f * density).toInt().coerceAtLeast(24)
+    val bitmap = android.graphics.Bitmap.createBitmap(
+        size,
+        size,
+        android.graphics.Bitmap.Config.ARGB_8888,
+    )
+    val canvas = Canvas(bitmap)
+    val center = size / 2f
+    val dotRadius = 6f * density
+    val ringWidth = 2f * density
+
+    if (headingDegrees != null) {
+        val conePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = HEADING_CONE_COLOR
+            style = Paint.Style.FILL
+        }
+        val coneLength = center - ringWidth
+        val halfWidth = 9f * density
+        val path = Path().apply {
+            moveTo(center, center - coneLength) // tip points north before rotation
+            lineTo(center - halfWidth, center - dotRadius)
+            lineTo(center + halfWidth, center - dotRadius)
+            close()
+        }
+        canvas.save()
+        canvas.rotate(headingDegrees, center, center)
+        canvas.drawPath(path, conePaint)
+        canvas.restore()
+    }
+
+    canvas.drawCircle(
+        center,
+        center,
+        dotRadius + ringWidth,
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.WHITE
+            style = Paint.Style.FILL
+        },
+    )
+    canvas.drawCircle(
+        center,
+        center,
+        dotRadius,
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = LOCATION_DOT_COLOR
+            style = Paint.Style.FILL
+        },
+    )
+    return bitmap
+}
+
+private fun accuracyFillPaint(): org.mapsforge.core.graphics.Paint =
+    AndroidGraphicFactory.INSTANCE.createPaint().apply {
+        setColor(ACCURACY_FILL_COLOR)
+        setStyle(Style.FILL)
+    }
+
+private fun accuracyStrokePaint(density: Float): org.mapsforge.core.graphics.Paint =
+    AndroidGraphicFactory.INSTANCE.createPaint().apply {
+        setColor(ACCURACY_STROKE_COLOR)
+        setStyle(Style.STROKE)
+        setStrokeWidth(1.5f * density)
+    }
+
 private fun MapView.addMapLayer(context: Context, mapFile: File) {
     val tileCache: TileCache = AndroidUtil.createTileCache(
         context,
@@ -967,6 +1194,12 @@ private const val MIN_MAP_ZOOM = 0
 private const val MAX_MAP_ZOOM = 22
 private const val DEFAULT_MAP_ZOOM = 14
 private const val DEFAULT_INSTALLED_MAP_ZOOM = 12
+
+private const val HEADING_UPDATE_THRESHOLD_DEGREES = 2f
+private val LOCATION_DOT_COLOR = 0xFF1A73E8.toInt()
+private val HEADING_CONE_COLOR = 0x552A6FF0.toInt()
+private val ACCURACY_FILL_COLOR = 0x221A73E8.toInt()
+private val ACCURACY_STROKE_COLOR = 0x881A73E8.toInt()
 private const val LOCATION_UPDATE_INTERVAL_MILLIS = 10_000L
 private const val LOCATION_UPDATE_DISTANCE_METERS = 10f
 private val MONACO_CENTER = FieldCoordinate(latitude = 43.7384, longitude = 7.4246)
