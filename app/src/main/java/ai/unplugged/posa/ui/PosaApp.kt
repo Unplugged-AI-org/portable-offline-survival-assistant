@@ -1,12 +1,6 @@
 package ai.unplugged.posa.ui
 
 import ai.unplugged.posa.data.local.PosaDatabase
-import ai.unplugged.posa.data.local.StarterChecklistInstaller
-import ai.unplugged.posa.data.local.repository.repositories
-import ai.unplugged.posa.data.model.Checklist
-import ai.unplugged.posa.data.model.ChecklistItem
-import ai.unplugged.posa.data.model.FieldNote
-import ai.unplugged.posa.data.model.GearItem
 import ai.unplugged.posa.data.pack.BundledPackInstaller
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -43,7 +37,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -56,7 +49,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ai.unplugged.posa.ui.theme.PosaTheme
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
 
@@ -71,43 +63,27 @@ fun PosaApp(database: PosaDatabase? = null) {
     var guideContentState by remember {
         mutableStateOf(GuideContentState(isLoading = database != null))
     }
-    var toolsContentState by remember {
-        mutableStateOf(ToolsContentState(isLoading = database != null))
-    }
-    var toolsReloadToken by remember { mutableStateOf(0) }
     var bundledGuideInstalled by remember(database) {
         mutableStateOf(database == null)
     }
     val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
+
+    val toolsViewModel: ToolsViewModel = viewModel(
+        factory = ToolsViewModel.factory(database),
+    )
+    val toolsContentState by toolsViewModel.state.collectAsState()
 
     val mapViewModel: MapViewModel = viewModel(
-        factory = MapViewModel.factory(database) { toolsReloadToken += 1 },
+        factory = MapViewModel.factory(database) { toolsViewModel.reload() },
     )
     val mapContentState by mapViewModel.state.collectAsState()
     val selectedWaypointId by mapViewModel.selectedWaypointId.collectAsState()
 
-    fun runToolsMutation(block: suspend (PosaDatabase) -> Unit) {
-        val localDatabase = database
-        if (localDatabase == null) {
-            toolsContentState = toolsContentState.copy(
-                errorMessage = "Local tools database is not connected.",
-            )
-            return
-        }
-
-        coroutineScope.launch {
-            try {
-                withContext(Dispatchers.IO) {
-                    block(localDatabase)
-                }
-                toolsReloadToken += 1
-            } catch (exception: Exception) {
-                toolsContentState = toolsContentState.copy(
-                    isLoading = false,
-                    errorMessage = "Tools data could not be saved: ${exception.message.orEmpty()}",
-                )
-            }
+    // Tools content also reflects guide cards, so refresh once the bundled pack
+    // finishes installing. Temporary seam; see ToolsViewModel.reload docs.
+    LaunchedEffect(bundledGuideInstalled) {
+        if (bundledGuideInstalled) {
+            toolsViewModel.reload()
         }
     }
 
@@ -123,155 +99,18 @@ fun PosaApp(database: PosaDatabase? = null) {
     )
 
     val toolsActions = ToolsActions(
-        onCreateChecklist = { title, description ->
-            runToolsMutation { localDatabase ->
-                val now = System.currentTimeMillis()
-                localDatabase.repositories().checklists.saveChecklist(
-                    Checklist(
-                        id = newLocalId("checklist"),
-                        title = title,
-                        description = description,
-                        isArchived = false,
-                        createdAtEpochMillis = now,
-                        updatedAtEpochMillis = now,
-                    ),
-                )
-            }
-        },
-        onUpdateChecklist = { checklist, title, description, isArchived ->
-            runToolsMutation { localDatabase ->
-                localDatabase.repositories().checklists.saveChecklist(
-                    checklist.copy(
-                        title = title,
-                        description = description,
-                        isArchived = isArchived,
-                        updatedAtEpochMillis = System.currentTimeMillis(),
-                    ),
-                )
-            }
-        },
-        onDeleteChecklist = { checklist ->
-            runToolsMutation { localDatabase ->
-                localDatabase.repositories().checklists.deleteChecklist(checklist.id)
-            }
-        },
-        onCreateChecklistItem = { checklistId, label, details ->
-            runToolsMutation { localDatabase ->
-                val repositories = localDatabase.repositories()
-                val now = System.currentTimeMillis()
-                val nextPosition = repositories.checklists
-                    .listItemsForChecklist(checklistId)
-                    .maxOfOrNull { it.position + 1 } ?: 0
-                repositories.checklists.saveItem(
-                    ChecklistItem(
-                        id = newLocalId("checklist-item"),
-                        checklistId = checklistId,
-                        label = label,
-                        details = details,
-                        position = nextPosition,
-                        isChecked = false,
-                        updatedAtEpochMillis = now,
-                    ),
-                )
-            }
-        },
-        onUpdateChecklistItem = { item, label, details, isChecked ->
-            runToolsMutation { localDatabase ->
-                localDatabase.repositories().checklists.saveItem(
-                    item.copy(
-                        label = label,
-                        details = details,
-                        isChecked = isChecked,
-                        updatedAtEpochMillis = System.currentTimeMillis(),
-                    ),
-                )
-            }
-        },
-        onDeleteChecklistItem = { item ->
-            runToolsMutation { localDatabase ->
-                localDatabase.repositories().checklists.deleteItem(item.id)
-            }
-        },
-        onCreateGearItem = { draft ->
-            runToolsMutation { localDatabase ->
-                val now = System.currentTimeMillis()
-                localDatabase.repositories().gear.save(
-                    GearItem(
-                        id = newLocalId("gear"),
-                        name = draft.name,
-                        category = draft.category,
-                        quantity = draft.quantity,
-                        condition = draft.condition,
-                        notes = draft.notes,
-                        isAvailable = draft.isAvailable,
-                        createdAtEpochMillis = now,
-                        updatedAtEpochMillis = now,
-                    ),
-                )
-            }
-        },
-        onUpdateGearItem = { item, draft ->
-            runToolsMutation { localDatabase ->
-                localDatabase.repositories().gear.save(
-                    item.copy(
-                        name = draft.name,
-                        category = draft.category,
-                        quantity = draft.quantity,
-                        condition = draft.condition,
-                        notes = draft.notes,
-                        isAvailable = draft.isAvailable,
-                        updatedAtEpochMillis = System.currentTimeMillis(),
-                    ),
-                )
-            }
-        },
-        onDeleteGearItem = { item ->
-            runToolsMutation { localDatabase ->
-                localDatabase.repositories().gear.delete(item.id)
-            }
-        },
-        onCreateFieldNote = { draft ->
-            runToolsMutation { localDatabase ->
-                val now = System.currentTimeMillis()
-                localDatabase.repositories().fieldNotes.save(
-                    FieldNote(
-                        id = newLocalId("field-note"),
-                        title = draft.title,
-                        body = draft.body,
-                        createdAtEpochMillis = now,
-                        updatedAtEpochMillis = now,
-                        latitude = draft.latitude,
-                        longitude = draft.longitude,
-                        waypointId = draft.waypointId,
-                        checklistId = draft.checklistId,
-                        guideCardId = draft.guideCardId,
-                        gearItemId = draft.gearItemId,
-                    ),
-                )
-            }
-        },
-        onUpdateFieldNote = { note, draft ->
-            runToolsMutation { localDatabase ->
-                localDatabase.repositories().fieldNotes.save(
-                    note.copy(
-                        title = draft.title,
-                        body = draft.body,
-                        updatedAtEpochMillis = System.currentTimeMillis(),
-                        latitude = draft.latitude,
-                        longitude = draft.longitude,
-                        waypointId = draft.waypointId,
-                        checklistId = draft.checklistId,
-                        guideCardId = draft.guideCardId,
-                        gearItemId = draft.gearItemId,
-                    ),
-                )
-            }
-        },
-        onDeleteFieldNote = { note ->
-            runToolsMutation { localDatabase ->
-                localDatabase.repositories().fieldNotes.delete(note.id)
-            }
-        },
+        onCreateChecklist = toolsViewModel::createChecklist,
+        onUpdateChecklist = toolsViewModel::updateChecklist,
+        onDeleteChecklist = toolsViewModel::deleteChecklist,
+        onCreateChecklistItem = toolsViewModel::createChecklistItem,
+        onUpdateChecklistItem = toolsViewModel::updateChecklistItem,
+        onDeleteChecklistItem = toolsViewModel::deleteChecklistItem,
+        onCreateGearItem = toolsViewModel::createGearItem,
+        onUpdateGearItem = toolsViewModel::updateGearItem,
+        onDeleteGearItem = toolsViewModel::deleteGearItem,
+        onCreateFieldNote = toolsViewModel::createFieldNote,
+        onUpdateFieldNote = toolsViewModel::updateFieldNote,
+        onDeleteFieldNote = toolsViewModel::deleteFieldNote,
     )
 
     LaunchedEffect(database) {
@@ -294,30 +133,6 @@ fun PosaApp(database: PosaDatabase? = null) {
             guideContentState = guideContentState.copy(
                 isLoading = false,
                 errorMessage = "Bundled guide pack could not be loaded: ${exception.message.orEmpty()}",
-            )
-        }
-    }
-
-    LaunchedEffect(database, bundledGuideInstalled, toolsReloadToken) {
-        val localDatabase = database
-        if (localDatabase == null) {
-            toolsContentState = ToolsContentState(
-                errorMessage = "Local tools database is not connected.",
-            )
-            return@LaunchedEffect
-        }
-
-        toolsContentState = toolsContentState.copy(isLoading = true, errorMessage = null)
-        try {
-            val loadedState = withContext(Dispatchers.IO) {
-                StarterChecklistInstaller.installIfNeeded(context, localDatabase)
-                loadToolsContent(localDatabase)
-            }
-            toolsContentState = loadedState
-        } catch (exception: Exception) {
-            toolsContentState = toolsContentState.copy(
-                isLoading = false,
-                errorMessage = "Tools data could not be loaded: ${exception.message.orEmpty()}",
             )
         }
     }
