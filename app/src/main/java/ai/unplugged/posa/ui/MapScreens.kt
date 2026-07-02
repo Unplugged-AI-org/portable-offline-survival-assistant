@@ -16,28 +16,36 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AddLocationAlt
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.FileOpen
 import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.outlined.LocationOn
+import androidx.compose.material.icons.outlined.Menu
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -87,10 +95,12 @@ internal data class MapActions(
     val onRecordBreadcrumbPoint: (trail: BreadcrumbTrail, coordinate: FieldCoordinate) -> Unit,
 )
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun MapSection(
     state: MapContentState,
     selectedWaypointId: String?,
+    contentPadding: PaddingValues,
     onSelectWaypoint: (String?) -> Unit,
     actions: MapActions,
 ) {
@@ -113,6 +123,7 @@ internal fun MapSection(
     ) { uri ->
         uri?.let(actions.onImportMap)
     }
+    var toolsSheetOpen by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(activeTrail?.trail?.id, currentLocation?.recordedAtEpochMillis) {
         if (activeTrail != null && currentLocation != null) {
@@ -120,44 +131,103 @@ internal fun MapSection(
         }
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        MapStateBanners(state)
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(bottom = contentPadding.calculateBottomPadding()),
+    ) {
         MapsforgeMapSurface(
             activeInstalledMap = state.activeInstalledMap,
             selectedWaypoint = selectedWaypoint,
+            modifier = Modifier.fillMaxSize(),
         )
-        InstalledMapPanel(
-            state = state,
-            onImportMap = { mapImportLauncher.launch(arrayOf("*/*")) },
-            onSetMapEnabled = actions.onSetInstalledMapEnabled,
-            onDeleteMap = actions.onDeleteInstalledMap,
-        )
-        LocationPanel(
-            hasLocationPermission = hasLocationPermission,
-            currentLocation = currentLocation,
-            onRequestPermission = {
-                permissionLauncher.launch(
-                    arrayOf(
-                        Manifest.permission.ACCESS_FINE_LOCATION,
-                        Manifest.permission.ACCESS_COARSE_LOCATION,
-                    ),
+
+        // Top overlay, below the status bar: loading/error banners on the left,
+        // the tools menu button pinned to the right (ATAK style).
+        Row(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Box(modifier = Modifier.weight(1f)) {
+                if (state.isLoading || state.errorMessage != null) {
+                    MapStateBanners(state)
+                }
+            }
+            MapMenuButton(onClick = { toolsSheetOpen = true })
+        }
+    }
+
+    if (toolsSheetOpen) {
+        ModalBottomSheet(onDismissRequest = { toolsSheetOpen = false }) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 32.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                Text(
+                    text = "Map tools",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
                 )
-            },
-        )
-        WaypointPanel(
-            state = state,
-            currentLocation = currentLocation,
-            selectedWaypoint = selectedWaypoint,
-            onSelectWaypoint = onSelectWaypoint,
-            onSaveCurrentWaypoint = actions.onSaveCurrentWaypoint,
-            onDeleteWaypoint = actions.onDeleteWaypoint,
-        )
-        BreadcrumbPanel(
-            state = state,
-            currentLocation = currentLocation,
-            activeTrail = activeTrail,
-            onStartBreadcrumb = actions.onStartBreadcrumb,
-            onStopBreadcrumb = actions.onStopBreadcrumb,
+                InstalledMapPanel(
+                    state = state,
+                    onImportMap = { mapImportLauncher.launch(arrayOf("*/*")) },
+                    onSetMapEnabled = actions.onSetInstalledMapEnabled,
+                    onDeleteMap = actions.onDeleteInstalledMap,
+                )
+                LocationPanel(
+                    hasLocationPermission = hasLocationPermission,
+                    currentLocation = currentLocation,
+                    onRequestPermission = {
+                        permissionLauncher.launch(
+                            arrayOf(
+                                Manifest.permission.ACCESS_FINE_LOCATION,
+                                Manifest.permission.ACCESS_COARSE_LOCATION,
+                            ),
+                        )
+                    },
+                )
+                WaypointPanel(
+                    state = state,
+                    currentLocation = currentLocation,
+                    selectedWaypoint = selectedWaypoint,
+                    onSelectWaypoint = onSelectWaypoint,
+                    onSaveCurrentWaypoint = actions.onSaveCurrentWaypoint,
+                    onDeleteWaypoint = actions.onDeleteWaypoint,
+                )
+                BreadcrumbPanel(
+                    state = state,
+                    currentLocation = currentLocation,
+                    activeTrail = activeTrail,
+                    onStartBreadcrumb = actions.onStartBreadcrumb,
+                    onStopBreadcrumb = actions.onStopBreadcrumb,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MapMenuButton(onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        shadowElevation = 4.dp,
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.Menu,
+            contentDescription = "Map tools",
+            modifier = Modifier.padding(12.dp),
         )
     }
 }
@@ -166,6 +236,7 @@ internal fun MapSection(
 private fun MapsforgeMapSurface(
     activeInstalledMap: InstalledMap?,
     selectedWaypoint: Waypoint?,
+    modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     var mapFile by remember { mutableStateOf<File?>(null) }
@@ -205,10 +276,7 @@ private fun MapsforgeMapSurface(
     }
 
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(300.dp),
-        shape = RoundedCornerShape(8.dp),
+        modifier = modifier,
         tonalElevation = 1.dp,
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
