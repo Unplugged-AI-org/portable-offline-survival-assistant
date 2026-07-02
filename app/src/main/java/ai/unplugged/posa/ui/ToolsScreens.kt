@@ -4,6 +4,7 @@ import ai.unplugged.posa.data.model.Checklist
 import ai.unplugged.posa.data.model.ChecklistItem
 import ai.unplugged.posa.data.model.FieldNote
 import ai.unplugged.posa.data.model.GearItem
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +17,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ArrowDropDown
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -33,6 +36,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -164,8 +168,30 @@ private fun ChecklistsTab(
 private fun NewChecklistForm(
     onCreateChecklist: (title: String, description: String?) -> Unit,
 ) {
+    var expanded by rememberSaveable { mutableStateOf(false) }
     var title by rememberSaveable { mutableStateOf("") }
     var description by rememberSaveable { mutableStateOf("") }
+
+    fun reset() {
+        title = ""
+        description = ""
+        expanded = false
+    }
+
+    if (!expanded) {
+        OutlinedButton(
+            onClick = { expanded = true },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.Add,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+            )
+            Text("New checklist")
+        }
+        return
+    }
 
     PanelSurface {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -188,20 +214,24 @@ private fun NewChecklistForm(
                 minLines = 2,
                 label = { Text("Description") },
             )
-            Button(
-                onClick = {
-                    onCreateChecklist(title.trim(), description.trim().blankToNull())
-                    title = ""
-                    description = ""
-                },
-                enabled = title.isNotBlank(),
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Add,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                )
-                Text("Add checklist")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = {
+                        onCreateChecklist(title.trim(), description.trim().blankToNull())
+                        reset()
+                    },
+                    enabled = title.isNotBlank(),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Add,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Text("Add checklist")
+                }
+                TextButton(onClick = { reset() }) {
+                    Text("Cancel")
+                }
             }
         }
     }
@@ -219,6 +249,7 @@ private fun ChecklistPanel(
     val checklist = checklistWithItems.checklist
     val items = checklistWithItems.items
     val completed = items.count { it.isChecked }
+    var expanded by rememberSaveable(checklist.id) { mutableStateOf(false) }
     var title by rememberSaveable(checklist.id, checklist.updatedAtEpochMillis) {
         mutableStateOf(checklist.title)
     }
@@ -233,29 +264,33 @@ private fun ChecklistPanel(
 
     PanelSurface {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            ChecklistHeader(
+                title = checklist.title,
+                completed = completed,
+                total = items.size,
+                isArchived = checklist.isArchived,
+                expanded = expanded,
+                onToggle = { expanded = !expanded },
+            )
+
+            if (!expanded) {
+                return@Column
+            }
+
+            HorizontalDivider()
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = "${completed}/${items.size} complete",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.secondary,
+                    text = if (isArchived) "Archived" else "Active",
+                    style = MaterialTheme.typography.labelMedium,
                 )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = if (isArchived) "Archived" else "Active",
-                        style = MaterialTheme.typography.labelMedium,
-                    )
-                    Switch(
-                        checked = isArchived,
-                        onCheckedChange = { isArchived = it },
-                    )
-                }
+                Switch(
+                    checked = isArchived,
+                    onCheckedChange = { isArchived = it },
+                )
             }
             OutlinedTextField(
                 value = title,
@@ -350,6 +385,60 @@ private fun ChecklistPanel(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ChecklistHeader(
+    title: String,
+    completed: Int,
+    total: Int,
+    isArchived: Boolean,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onToggle),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = title.ifBlank { "Untitled checklist" },
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = buildString {
+                        append("$completed/$total complete")
+                        if (isArchived) append(" · Archived")
+                    },
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.secondary,
+                )
+            }
+            Icon(
+                imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                contentDescription = if (expanded) "Collapse checklist" else "Expand checklist",
+            )
+        }
+        if (total > 0) {
+            LinearProgressIndicator(
+                progress = { completed.toFloat() / total },
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
     }
 }
