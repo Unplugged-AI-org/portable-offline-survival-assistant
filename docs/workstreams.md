@@ -8,14 +8,23 @@ source of truth: update the "Current State Snapshot" as departments land work.
 **Working model (agreed):**
 - One session per department. This document seeds each session.
 - Branch per department (e.g. `ui-architecture`, `maps-overlays`); one concern per PR.
-- First department: **UI Architecture**. UI approach: **incremental ViewModel extraction**
-  (the app must build and run after each step).
+- First department: **UI Architecture** — ✅ **landed** on branch `ui-architecture`
+  via incremental ViewModel extraction (app built and tested after each step).
+  Next up: parallelize **Maps** (#2) and the content/retrieval track (#3→#4, #5→#4).
 
 ---
 
 ## Current State Snapshot
 
 **Solid / done (roadmap phases 0–8):**
+- UI architecture: `PosaApp.kt` reduced from a 772-line monolith to a 338-line
+  nav + scaffold + VM-wiring shell. Three `StateFlow`-backed ViewModels
+  (`MapViewModel`, `ToolsViewModel`, `GuideViewModel`) own their content load,
+  mutations, and UI selection state. `DestinationScreen` prop-drilling collapsed
+  from 19 params to 5 (the three VMs + destination + padding), with per-tab
+  binding composables. Cross-domain refresh isolated to two documented callbacks
+  (`MapViewModel.onDataChanged`, `GuideViewModel.onGuidePackInstalled` →
+  `ToolsViewModel.reload()`). 14 new ViewModel unit tests.
 - Data layer: 11 Room entities, 9 DAOs, 9 repositories, mappers, 2 migrations
   (v1→v3), in-memory test support. Well tested.
 - Content pipeline: bundled `wilderness-basics` pack (6 draft cards), manifest +
@@ -32,10 +41,11 @@ source of truth: update the "Current State Snapshot" as departments land work.
 > Guide/Retrieval departments.
 
 **Known gaps / debt (the raw material for the departments):**
-- `PosaApp.kt` is a 773-line monolith: state hoisting, DB mutations, file I/O,
-  `LaunchedEffect` loaders, and layout dispatch all in one composable. No
-  ViewModel layer. Heavy prop-drilling (15+ params into `DestinationScreen`).
-  Cross-domain coupling via reload tokens.
+- ~~`PosaApp.kt` is a 773-line monolith~~ **RESOLVED** by the UI Architecture
+  department (see "Solid / done"). Remaining seam: the two cross-domain reload
+  callbacks are a clean interim boundary but still couple tools to map/guide
+  writes; genuinely cutting them (tools load reacting to the waypoint/guide-card
+  repositories directly) is a Local Data / Retrieval concern, not UI work.
 - Maps: waypoints, breadcrumbs, and current location are **text lists only** —
   nothing is drawn on the map surface.
 - Guide content is thin (6 cards) and workflow term-matching is hardcoded and
@@ -52,28 +62,29 @@ source of truth: update the "Current State Snapshot" as departments land work.
 Each section is a **session seed**: open a new session in this repo, paste the
 Scope + Tasks, and have the agent plan-then-build within that scope only.
 
-### 1. UI Architecture  ▶ FIRST
+### 1. UI Architecture  ✅ LANDED (branch `ui-architecture`)
 **Goal:** replace the monolith with a testable ViewModel-backed architecture,
 incrementally, without breaking the running app. Owner is hands-on here.
 
 **Key files:** `ui/PosaApp.kt`, `ui/MapContent.kt`, `ui/ToolsContent.kt`,
-`ui/GuideContent.kt`, the three `*Screens.kt`, `ui/PosaDestination.kt`, `MainActivity.kt`.
+`ui/GuideContent.kt`, the three `*Screens.kt`, `ui/PosaDestination.kt`, `MainActivity.kt`,
+plus new `ui/MapViewModel.kt`, `ui/ToolsViewModel.kt`, `ui/GuideViewModel.kt`.
 
 **Tasks (incremental, app builds after each step):**
-1. Add a ViewModel layer (`androidx.lifecycle.viewmodel.compose`). Establish the
-   pattern with **MapViewModel** first: move `loadMapContent`, `MapActions`
-   mutations, and reload-token logic out of `PosaApp.kt`; expose `StateFlow<MapContentState>`.
-2. Repeat for **ToolsViewModel**, then **GuideViewModel** (guided question query,
-   selected card/workflow, search).
-3. Collapse prop-drilling: each screen takes its ViewModel (or a small state +
-   callbacks holder), not 15 loose params.
-4. Reduce `PosaApp.kt` to navigation + scaffold + VM wiring only.
-5. Decouple cross-domain reload tokens (map mutation shouldn't poke tools).
-6. Add unit tests for each ViewModel (state transitions, mutation effects).
+1. ✅ Add a ViewModel layer (`androidx.lifecycle.viewmodel.compose`). **MapViewModel**
+   owns `loadMapContent`, mutations, selection, and reload — `StateFlow<MapContentState>`.
+2. ✅ **ToolsViewModel** and **GuideViewModel** done (guided question query,
+   selected card/workflow, search, bundled-pack install).
+3. ✅ Prop-drilling collapsed: `DestinationScreen` 19 params → 5; per-tab binding
+   composables build the action holders from VM method refs.
+4. ✅ `PosaApp.kt` reduced to navigation + scaffold + VM wiring only (338 lines).
+5. ⏳ Cross-domain reload now isolated to two documented callbacks (not tokens);
+   fully cutting them is deferred to Local Data / Retrieval (repository-reactive load).
+6. ✅ Unit tests for each ViewModel (state transitions, mutation effects) — 14 new tests.
 
 **Dependencies:** none upstream. Everything else builds on this, so it goes first.
-**Verify:** app builds/launches, all four tabs navigate, existing unit tests pass,
-new ViewModel tests pass.
+**Verify:** ✅ app builds (`:app:assembleDebug`), all unit tests pass (44 total,
+incl. new ViewModel tests).
 
 ### 2. Maps
 **Goal:** draw field data on the map, not just list it. Owner is hands-on.
