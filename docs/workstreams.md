@@ -8,9 +8,9 @@ source of truth: update the "Current State Snapshot" as departments land work.
 **Working model (agreed):**
 - One session per department. This document seeds each session.
 - Branch per department (e.g. `ui-architecture`, `maps-overlays`); one concern per PR.
-- First department: **UI Architecture** — ✅ **landed** on branch `ui-architecture`
-  via incremental ViewModel extraction (app built and tested after each step).
-  Next up: parallelize **Maps** (#2) and the content/retrieval track (#3→#4, #5→#4).
+- Landed so far: **UI Architecture** (#1), minimal **CI** (#6a), and **Maps** (#2)
+  — all merged to `main`. Next up: the content/retrieval track (#3→#4, #5→#4),
+  which is gated on merging the `phase-8-retrieval-rag` branch first (see note below).
 
 ---
 
@@ -30,7 +30,12 @@ source of truth: update the "Current State Snapshot" as departments land work.
 - Content pipeline: bundled `wilderness-basics` pack (6 draft cards), manifest +
   YAML front-matter parser, provenance model, LIKE-based search.
 - Maps: Mapsforge renders bundled Monaco fixture + user-imported `.map` files;
-  GPS, distance/bearing, breadcrumb recording all persist.
+  GPS, distance/bearing, breadcrumb recording all persist. Field data is now drawn
+  on the surface — waypoint pin markers (selected pin highlighted), breadcrumb
+  polylines (active trail brighter), and a current-location marker with accuracy
+  circle + heading cone. Long-press the map to drop a waypoint at that point.
+- CI: GitHub Actions runs `:app:assembleDebug` + `testDebugUnitTest` on JDK 17 for
+  every push to `main` and every PR (`.github/workflows/ci.yml`).
 - Guide: Ask (retrieval) + Workflows + Cards tabs; deterministic, cited, with an
   "I do not know from installed sources" fallback.
 - Tests: 10 unit-test classes / 27 methods; data layer + retrieval + workflows
@@ -46,14 +51,15 @@ source of truth: update the "Current State Snapshot" as departments land work.
   callbacks are a clean interim boundary but still couple tools to map/guide
   writes; genuinely cutting them (tools load reacting to the waypoint/guide-card
   repositories directly) is a Local Data / Retrieval concern, not UI work.
-- Maps: waypoints, breadcrumbs, and current location are **text lists only** —
-  nothing is drawn on the map surface.
+- ~~Maps: waypoints, breadcrumbs, and current location are **text lists only** —
+  nothing is drawn on the map surface.~~ **RESOLVED** by the Maps department
+  (see "Solid / done"): markers, polylines, location marker, and long-press-to-add.
 - Guide content is thin (6 cards) and workflow term-matching is hardcoded and
   fragile (string lists coupled to card titles/categories).
 - Retrieval is naive substring scoring: no stemming/synonyms, English/US-locale
   baked in, hand-maintained STOP_WORDS / MAP_CONTEXT_TERMS, arbitrary constants.
-- No CI (`.github/workflows` has only issue templates). No Compose UI tests. No
-  `PackManifestParser` tests. No coverage reporting.
+- ~~No CI~~ **RESOLVED** (#6a): minimal build+unit-test CI is live. Still missing:
+  no Compose UI tests, no `PackManifestParser` tests, no coverage reporting (#6 remainder).
 
 ---
 
@@ -86,24 +92,28 @@ plus new `ui/MapViewModel.kt`, `ui/ToolsViewModel.kt`, `ui/GuideViewModel.kt`.
 **Verify:** ✅ app builds (`:app:assembleDebug`), all unit tests pass (44 total,
 incl. new ViewModel tests).
 
-### 2. Maps
+### 2. Maps  ✅ LANDED (merged to `main`)
 **Goal:** draw field data on the map, not just list it. Owner is hands-on.
 
-**Key files:** `ui/MapScreens.kt` (esp. `addMapLayer`, `WaypointPanel`,
-`BreadcrumbPanel`), `ui/MapContent.kt`, `data/.../InstalledMapImporter.kt`, `ui/MapMath.kt`.
+**Key files:** `ui/MapScreens.kt` (esp. `addMapLayer`, `WaypointOverlay`,
+`BreadcrumbOverlay`, `LocationOverlay`), `ui/MapContent.kt`,
+`data/.../InstalledMapImporter.kt`, `ui/MapMath.kt`.
 
 **Tasks:**
-1. Render **waypoint markers** as a Mapsforge overlay; persist across restart;
-   remove on delete; tapping a waypoint row centers/zooms to it. (Existing
-   `docs/initial-issues.md` backlog item.)
-2. Render **breadcrumb trails** as polylines on the map.
-3. Render a **current-location** marker/dot that follows GPS updates.
-4. Optional: tap-on-map to create a waypoint; long-press context.
+1. ✅ Render **waypoint markers** as a Mapsforge overlay (`WaypointOverlay`);
+   persist across restart; remove on delete; selecting a waypoint row centers on it
+   and highlights its pin.
+2. ✅ Render **breadcrumb trails** as polylines (`BreadcrumbOverlay`); active trail
+   drawn brighter than finished ones.
+3. ✅ Render a **current-location** marker/dot that follows GPS updates
+   (`LocationOverlay` — blue dot, accuracy circle, heading cone).
+4. ✅ **Long-press the map to drop a waypoint** at that point (dialog for name/notes).
+   Deeper long-press context menus remain a possible follow-up.
 
 **Dependencies:** cleaner if UI Architecture lands first (overlay state in MapViewModel),
 but the Mapsforge layer code is self-contained and can start in parallel if needed.
-**Verify:** run app with bundled Monaco map; save waypoints → markers appear/persist/delete;
-record a breadcrumb → polyline shows.
+**Verify:** ✅ app builds, unit tests pass. On-device visual check (markers/polylines
+render, long-press drops a pin) still pending a real device/emulator run.
 
 ### 3. Guide / Workflows
 **Goal:** make guidance more organized and genuinely useful; de-hardcode matching.
@@ -168,9 +178,11 @@ though it's listed last — it protects every other workstream.
 coverage), `docs/release-notes.md`, `README.md` status.
 
 **Tasks:**
-1. **GitHub Actions CI:** build + `testDebugUnitTest` on PR/push. CI should use the
-   standard Android SDK setup action. Repo has **no `local.properties`** — local runs
-   need `JAVA_HOME` → Android Studio JBR and `ANDROID_HOME`; document this.
+1. ✅ **GitHub Actions CI:** build + `testDebugUnitTest` on PR/push
+   (`.github/workflows/ci.yml`), JDK 17 + `android-actions/setup-android`. Repo has
+   **no `local.properties`** — local runs need `JAVA_HOME` → Android Studio JBR and
+   `ANDROID_HOME` (documented below). *(Follow-up: the setup actions still target
+   Node 20, which GitHub auto-bumps to Node 24 with a deprecation warning.)*
 2. Add **Compose UI test** harness (`androidx.compose.ui:ui-test-junit4`) + first screen tests.
 3. Coverage reporting (JaCoCo or similar) with a baseline.
 4. Release process: versioning, signed-build docs, release-notes discipline.
@@ -192,9 +204,12 @@ valuable after UI Architecture (#1) exposes testable seams.
         └──▶ #5 Local Data (FTS) ──▶ #4 Retrieval/RAG
 ```
 
-**Recommended order:** (a) minimal CI from #6 → (b) #1 UI Architecture → then
-parallelize #2 Maps and the #3→#4 / #5→#4 content+retrieval track → finish #6
+**Recommended order:** (a) ✅ minimal CI from #6 → (b) ✅ #1 UI Architecture →
+(c) ✅ #2 Maps → then the #3→#4 / #5→#4 content+retrieval track → finish #6
 (UI tests, coverage, release). Owner is hands-on in #1 and #2.
+
+> **Next-up gate:** the Guide "Ask"/Workflows (phases 7–8) live on the unmerged
+> `phase-8-retrieval-rag` branch — merge it before starting #3 Guide or #4 Retrieval.
 
 ---
 
