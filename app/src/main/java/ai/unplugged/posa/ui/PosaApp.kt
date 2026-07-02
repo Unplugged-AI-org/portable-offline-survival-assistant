@@ -156,10 +156,6 @@ private fun DestinationScreen(
                 .padding(horizontal = 20.dp, vertical = 24.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
-            // Tools drops the explainer header; onboarding will cover usage later.
-            if (destination != PosaDestination.Tools) {
-                DestinationHeader(destination)
-            }
             when (destination) {
                 PosaDestination.Guide -> GuideDestination(
                     guideViewModel = guideViewModel,
@@ -260,28 +256,6 @@ private fun MapDestination(mapViewModel: MapViewModel, contentPadding: PaddingVa
             onRecordBreadcrumbPoint = mapViewModel::recordBreadcrumbPoint,
         ),
     )
-}
-
-@Composable
-private fun DestinationHeader(destination: PosaDestination) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Icon(
-            imageVector = destination.icon,
-            contentDescription = null,
-            modifier = Modifier.size(40.dp),
-            tint = MaterialTheme.colorScheme.primary,
-        )
-        Text(
-            text = destination.headline,
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-        )
-        Text(
-            text = destination.summary,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onBackground,
-        )
-    }
 }
 
 @Composable
