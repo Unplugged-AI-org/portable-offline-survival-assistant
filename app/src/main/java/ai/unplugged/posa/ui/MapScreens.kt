@@ -87,6 +87,7 @@ import org.mapsforge.map.datastore.MapDataStore
 import org.mapsforge.map.layer.cache.TileCache
 import org.mapsforge.map.layer.overlay.Circle
 import org.mapsforge.map.layer.overlay.Marker
+import org.mapsforge.map.layer.overlay.Polyline
 import org.mapsforge.map.layer.renderer.TileRendererLayer
 import org.mapsforge.map.reader.MapFile
 import org.mapsforge.map.rendertheme.internal.MapsforgeThemes
@@ -152,7 +153,9 @@ internal fun MapSection(
     ) {
         MapsforgeMapSurface(
             activeInstalledMap = state.activeInstalledMap,
-            selectedWaypoint = selectedWaypoint,
+            waypoints = state.waypoints,
+            selectedWaypointId = selectedWaypointId,
+            breadcrumbTrails = state.breadcrumbTrails,
             currentLocation = currentLocation,
             headingDegrees = headingDegrees,
             modifier = Modifier.fillMaxSize(),
@@ -251,7 +254,9 @@ private fun MapMenuButton(onClick: () -> Unit) {
 @Composable
 private fun MapsforgeMapSurface(
     activeInstalledMap: InstalledMap?,
-    selectedWaypoint: Waypoint?,
+    waypoints: List<Waypoint>,
+    selectedWaypointId: String?,
+    breadcrumbTrails: List<BreadcrumbTrailSummary>,
     currentLocation: FieldCoordinate?,
     headingDegrees: Float?,
     modifier: Modifier = Modifier,
@@ -262,7 +267,12 @@ private fun MapsforgeMapSurface(
     var mapError by remember { mutableStateOf<String?>(null) }
     var appliedViewportKey by remember { mutableStateOf<String?>(null) }
     val mapViewHolder = remember { mutableStateOf<MapView?>(null) }
+    // Overlay z-order (bottom to top): breadcrumb trails, waypoint markers, then the
+    // current-location marker. They are added in that order on first render.
+    val breadcrumbOverlay = remember { BreadcrumbOverlay() }
+    val waypointOverlay = remember { WaypointOverlay() }
     val locationOverlay = remember { LocationOverlay() }
+    val selectedWaypoint = waypoints.firstOrNull { it.id == selectedWaypointId }
     val viewport = activeInstalledMap?.viewport() ?: MapViewport(
         center = selectedWaypoint?.toFieldCoordinate() ?: MONACO_CENTER,
         zoomLevel = DEFAULT_MAP_ZOOM,
@@ -328,6 +338,11 @@ private fun MapsforgeMapSurface(
                                 addMapLayer(viewContext, localMapFile)
                                 moveTo(viewport)
                                 appliedViewportKey = viewport.key
+                                // Fresh MapView (e.g. after switching map files): drop any
+                                // cached overlay state so the update pass re-adds layers here.
+                                breadcrumbOverlay.reset()
+                                waypointOverlay.reset()
+                                locationOverlay.reset()
                             }
                         },
                         update = { mapView ->
@@ -335,6 +350,8 @@ private fun MapsforgeMapSurface(
                                 mapView.moveTo(viewport)
                                 appliedViewportKey = viewport.key
                             }
+                            breadcrumbOverlay.update(mapView, breadcrumbTrails, density)
+                            waypointOverlay.update(mapView, waypoints, selectedWaypointId, density)
                             locationOverlay.update(mapView, currentLocation, headingDegrees, density)
                         },
                     )
@@ -1004,6 +1021,13 @@ private class LocationOverlay {
         mapView.layerManager.redrawLayers()
     }
 
+    /** Drops references to a destroyed [MapView]'s layers without touching them. */
+    fun reset() {
+        marker = null
+        circle = null
+        appliedKey = null
+    }
+
     private fun overlayKey(location: FieldCoordinate, headingDegrees: Float?): String {
         val headingBucket = headingDegrees?.let { (it / HEADING_UPDATE_THRESHOLD_DEGREES).toInt() }
         return "${location.latitude}:${location.longitude}:${location.accuracyMeters}:$headingBucket"
@@ -1073,6 +1097,142 @@ private fun accuracyStrokePaint(density: Float): org.mapsforge.core.graphics.Pai
         setColor(ACCURACY_STROKE_COLOR)
         setStyle(Style.STROKE)
         setStrokeWidth(1.5f * density)
+    }
+
+/**
+ * Manages waypoint pin [Marker]s on a Mapsforge [MapView], one per stored waypoint.
+ * Rebuilds the whole set whenever the waypoint list or the selection changes (keyed on
+ * id/position/selection), so deleted waypoints disappear and the selected pin is
+ * highlighted. Each pin's tip is anchored to its coordinate via a vertical offset.
+ */
+private class WaypointOverlay {
+    private val markers = mutableListOf<Marker>()
+    private var appliedKey: String? = null
+
+    fun update(mapView: MapView, waypoints: List<Waypoint>, selectedId: String?, density: Float) {
+        val key = overlayKey(waypoints, selectedId)
+        if (key == appliedKey) return
+
+        val layers = mapView.layerManager.layers
+        markers.forEach { layers.remove(it); it.onDestroy() }
+        markers.clear()
+
+        waypoints.forEach { waypoint ->
+            val bitmap = AndroidBitmap(buildWaypointBitmap(density, waypoint.id == selectedId))
+            // Anchor the pin tip (bottom-center of the bitmap) on the coordinate.
+            val marker = Marker(
+                LatLong(waypoint.latitude, waypoint.longitude),
+                bitmap,
+                0,
+                -bitmap.height / 2,
+            )
+            markers.add(marker)
+            layers.add(marker)
+        }
+
+        appliedKey = key
+        mapView.layerManager.redrawLayers()
+    }
+
+    /** Drops references to a destroyed [MapView]'s layers without touching them. */
+    fun reset() {
+        markers.clear()
+        appliedKey = null
+    }
+
+    private fun overlayKey(waypoints: List<Waypoint>, selectedId: String?): String =
+        waypoints.joinToString(";") { "${it.id}:${it.latitude}:${it.longitude}" } + "|sel=$selectedId"
+}
+
+/**
+ * Manages breadcrumb trail [Polyline]s on a Mapsforge [MapView], one per trail with at
+ * least two points. Rebuilds when a trail's point count or active/ended status changes;
+ * the active (still-recording) trail is drawn in a brighter colour than finished ones.
+ */
+private class BreadcrumbOverlay {
+    private val polylines = mutableListOf<Polyline>()
+    private var appliedKey: String? = null
+
+    fun update(mapView: MapView, trails: List<BreadcrumbTrailSummary>, density: Float) {
+        val key = overlayKey(trails)
+        if (key == appliedKey) return
+
+        val layers = mapView.layerManager.layers
+        polylines.forEach { layers.remove(it); it.onDestroy() }
+        polylines.clear()
+
+        trails.forEach { summary ->
+            val points = summary.points.sortedBy { it.sequenceNumber }
+            if (points.size < 2) return@forEach
+            val isActive = summary.trail.endedAtEpochMillis == null
+            val polyline = Polyline(breadcrumbPaint(density, isActive), AndroidGraphicFactory.INSTANCE)
+            polyline.latLongs.addAll(points.map { LatLong(it.latitude, it.longitude) })
+            polylines.add(polyline)
+            layers.add(polyline)
+        }
+
+        appliedKey = key
+        mapView.layerManager.redrawLayers()
+    }
+
+    /** Drops references to a destroyed [MapView]'s layers without touching them. */
+    fun reset() {
+        polylines.clear()
+        appliedKey = null
+    }
+
+    private fun overlayKey(trails: List<BreadcrumbTrailSummary>): String =
+        trails.joinToString(";") {
+            "${it.trail.id}:${it.points.size}:${it.trail.endedAtEpochMillis == null}"
+        }
+}
+
+/** Classic map pin: a filled circle head over a downward point, tip at bottom-center. */
+private fun buildWaypointBitmap(density: Float, selected: Boolean): android.graphics.Bitmap {
+    val width = (26f * density).toInt().coerceAtLeast(16)
+    val height = (36f * density).toInt().coerceAtLeast(22)
+    val bitmap = android.graphics.Bitmap.createBitmap(
+        width,
+        height,
+        android.graphics.Bitmap.Config.ARGB_8888,
+    )
+    val canvas = Canvas(bitmap)
+    val centerX = width / 2f
+    val headRadius = 9f * density
+    val headCenterY = headRadius + 1f * density
+    val fillColor = if (selected) WAYPOINT_SELECTED_COLOR else WAYPOINT_COLOR
+
+    val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = fillColor
+        style = Paint.Style.FILL
+    }
+    // Pin body: triangle from the head down to the tip at bottom-center.
+    val path = Path().apply {
+        moveTo(centerX, height - 1f * density)
+        lineTo(centerX - headRadius, headCenterY + headRadius * 0.5f)
+        lineTo(centerX + headRadius, headCenterY + headRadius * 0.5f)
+        close()
+    }
+    canvas.drawPath(path, fillPaint)
+    canvas.drawCircle(centerX, headCenterY, headRadius, fillPaint)
+    // White ring + inner dot on the head.
+    canvas.drawCircle(
+        centerX,
+        headCenterY,
+        headRadius * 0.42f,
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.WHITE
+            style = Paint.Style.FILL
+        },
+    )
+    return bitmap
+}
+
+private fun breadcrumbPaint(density: Float, isActive: Boolean): org.mapsforge.core.graphics.Paint =
+    AndroidGraphicFactory.INSTANCE.createPaint().apply {
+        setColor(if (isActive) BREADCRUMB_ACTIVE_COLOR else BREADCRUMB_COLOR)
+        setStyle(Style.STROKE)
+        setStrokeWidth(4f * density)
     }
 
 private fun MapView.addMapLayer(context: Context, mapFile: File) {
@@ -1200,6 +1360,10 @@ private val LOCATION_DOT_COLOR = 0xFF1A73E8.toInt()
 private val HEADING_CONE_COLOR = 0x552A6FF0.toInt()
 private val ACCURACY_FILL_COLOR = 0x221A73E8.toInt()
 private val ACCURACY_STROKE_COLOR = 0x881A73E8.toInt()
+private val WAYPOINT_COLOR = 0xFFD93025.toInt()
+private val WAYPOINT_SELECTED_COLOR = 0xFF1E8E3E.toInt()
+private val BREADCRUMB_COLOR = 0xFFF9AB00.toInt()
+private val BREADCRUMB_ACTIVE_COLOR = 0xFFF29900.toInt()
 private const val LOCATION_UPDATE_INTERVAL_MILLIS = 10_000L
 private const val LOCATION_UPDATE_DISTANCE_METERS = 10f
 private val MONACO_CENTER = FieldCoordinate(latitude = 43.7384, longitude = 7.4246)
