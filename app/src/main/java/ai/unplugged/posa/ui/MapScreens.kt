@@ -46,6 +46,7 @@ import androidx.compose.material.icons.outlined.MyLocation
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Save
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -66,6 +67,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -102,7 +104,7 @@ internal data class MapActions(
     val onImportMap: (Uri) -> Unit,
     val onSetInstalledMapEnabled: (InstalledMap, Boolean) -> Unit,
     val onDeleteInstalledMap: (InstalledMap) -> Unit,
-    val onSaveCurrentWaypoint: (name: String, notes: String?, coordinate: FieldCoordinate) -> Unit,
+    val onSaveWaypoint: (name: String, notes: String?, coordinate: FieldCoordinate) -> Unit,
     val onDeleteWaypoint: (waypoint: Waypoint) -> Unit,
     val onStartBreadcrumb: (coordinate: FieldCoordinate?) -> Unit,
     val onStopBreadcrumb: (trail: BreadcrumbTrail) -> Unit,
@@ -139,6 +141,7 @@ internal fun MapSection(
         uri?.let(actions.onImportMap)
     }
     var toolsSheetOpen by rememberSaveable { mutableStateOf(false) }
+    var pendingWaypointCoordinate by remember { mutableStateOf<FieldCoordinate?>(null) }
 
     LaunchedEffect(activeTrail?.trail?.id, currentLocation?.recordedAtEpochMillis) {
         if (activeTrail != null && currentLocation != null) {
@@ -158,6 +161,7 @@ internal fun MapSection(
             breadcrumbTrails = state.breadcrumbTrails,
             currentLocation = currentLocation,
             headingDegrees = headingDegrees,
+            onMapLongPress = { pendingWaypointCoordinate = it },
             modifier = Modifier.fillMaxSize(),
         )
 
@@ -219,7 +223,7 @@ internal fun MapSection(
                     currentLocation = currentLocation,
                     selectedWaypoint = selectedWaypoint,
                     onSelectWaypoint = onSelectWaypoint,
-                    onSaveCurrentWaypoint = actions.onSaveCurrentWaypoint,
+                    onSaveWaypoint = actions.onSaveWaypoint,
                     onDeleteWaypoint = actions.onDeleteWaypoint,
                 )
                 BreadcrumbPanel(
@@ -232,6 +236,68 @@ internal fun MapSection(
             }
         }
     }
+
+    pendingWaypointCoordinate?.let { coordinate ->
+        NewWaypointDialog(
+            coordinate = coordinate,
+            onDismiss = { pendingWaypointCoordinate = null },
+            onConfirm = { name, notes ->
+                actions.onSaveWaypoint(name, notes, coordinate)
+                pendingWaypointCoordinate = null
+            },
+        )
+    }
+}
+
+@Composable
+private fun NewWaypointDialog(
+    coordinate: FieldCoordinate,
+    onDismiss: () -> Unit,
+    onConfirm: (name: String, notes: String?) -> Unit,
+) {
+    var name by rememberSaveable { mutableStateOf("") }
+    var notes by rememberSaveable { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Drop waypoint") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "${formatCoordinate(coordinate.latitude)}, ${formatCoordinate(coordinate.longitude)}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.secondary,
+                )
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text("Waypoint name") },
+                )
+                OutlinedTextField(
+                    value = notes,
+                    onValueChange = { notes = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2,
+                    label = { Text("Notes") },
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(name.trim(), notes.trim().blankToNull()) },
+                enabled = name.isNotBlank(),
+            ) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        },
+    )
 }
 
 @Composable
@@ -259,10 +325,14 @@ private fun MapsforgeMapSurface(
     breadcrumbTrails: List<BreadcrumbTrailSummary>,
     currentLocation: FieldCoordinate?,
     headingDegrees: Float?,
+    onMapLongPress: (FieldCoordinate) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current.density
+    // Read the latest long-press callback from inside the Mapsforge layer, which is
+    // created once in the AndroidView factory and outlives individual recompositions.
+    val currentOnMapLongPress by rememberUpdatedState(onMapLongPress)
     var mapFile by remember { mutableStateOf<File?>(null) }
     var mapError by remember { mutableStateOf<String?>(null) }
     var appliedViewportKey by remember { mutableStateOf<String?>(null) }
@@ -336,6 +406,34 @@ private fun MapsforgeMapSurface(
                                 mapScaleBar.isVisible = true
                                 setBuiltInZoomControls(true)
                                 addMapLayer(viewContext, localMapFile)
+                                // Long-press anywhere on the map to drop a waypoint there.
+                                // Added before the data overlays so a press landing on an
+                                // existing marker is consumed by that marker instead.
+                                layerManager.layers.add(
+                                    object : org.mapsforge.map.layer.Layer() {
+                                        override fun draw(
+                                            boundingBox: org.mapsforge.core.model.BoundingBox,
+                                            zoomLevel: Byte,
+                                            canvas: org.mapsforge.core.graphics.Canvas,
+                                            topLeftPoint: org.mapsforge.core.model.Point,
+                                            rotation: org.mapsforge.core.model.Rotation,
+                                        ) = Unit
+
+                                        override fun onLongPress(
+                                            tapLatLong: LatLong,
+                                            layerXY: org.mapsforge.core.model.Point,
+                                            tapXY: org.mapsforge.core.model.Point,
+                                        ): Boolean {
+                                            currentOnMapLongPress(
+                                                FieldCoordinate(
+                                                    latitude = tapLatLong.latitude,
+                                                    longitude = tapLatLong.longitude,
+                                                ),
+                                            )
+                                            return true
+                                        }
+                                    },
+                                )
                                 moveTo(viewport)
                                 appliedViewportKey = viewport.key
                                 // Fresh MapView (e.g. after switching map files): drop any
@@ -551,7 +649,7 @@ private fun WaypointPanel(
     currentLocation: FieldCoordinate?,
     selectedWaypoint: Waypoint?,
     onSelectWaypoint: (String?) -> Unit,
-    onSaveCurrentWaypoint: (name: String, notes: String?, coordinate: FieldCoordinate) -> Unit,
+    onSaveWaypoint: (name: String, notes: String?, coordinate: FieldCoordinate) -> Unit,
     onDeleteWaypoint: (waypoint: Waypoint) -> Unit,
 ) {
     var waypointName by rememberSaveable { mutableStateOf("") }
@@ -581,7 +679,7 @@ private fun WaypointPanel(
             Button(
                 onClick = {
                     val coordinate = currentLocation ?: return@Button
-                    onSaveCurrentWaypoint(
+                    onSaveWaypoint(
                         waypointName.trim(),
                         waypointNotes.trim().blankToNull(),
                         coordinate,

@@ -75,13 +75,13 @@ class MapViewModelTest {
     }
 
     @Test
-    fun saveCurrentWaypointPersistsReloadsAndNotifies() = runBlocking {
+    fun saveWaypointPersistsReloadsAndNotifies() = runBlocking {
         var dataChangedCount = 0
         val viewModel = createViewModel { dataChangedCount += 1 }
         viewModel.awaitState { !it.isLoading }
         val before = viewModel.state.value.waypoints.size
 
-        viewModel.saveCurrentWaypoint(
+        viewModel.saveWaypoint(
             name = "Camp",
             notes = "near the ridge",
             coordinate = FieldCoordinate(latitude = 35.6, longitude = -82.5),

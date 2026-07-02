@@ -249,7 +249,7 @@ private fun MapDestination(mapViewModel: MapViewModel, contentPadding: PaddingVa
             onImportMap = mapViewModel::importMap,
             onSetInstalledMapEnabled = mapViewModel::setInstalledMapEnabled,
             onDeleteInstalledMap = mapViewModel::deleteInstalledMap,
-            onSaveCurrentWaypoint = mapViewModel::saveCurrentWaypoint,
+            onSaveWaypoint = mapViewModel::saveWaypoint,
             onDeleteWaypoint = mapViewModel::deleteWaypoint,
             onStartBreadcrumb = mapViewModel::startBreadcrumb,
             onStopBreadcrumb = mapViewModel::stopBreadcrumb,
