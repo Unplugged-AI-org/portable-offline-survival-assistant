@@ -360,17 +360,11 @@ private fun WorkflowDetail(
     onOpenGuideCard: (String) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(
-                text = workflow.id.title,
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-            )
-            Text(
-                text = "Built from installed guide cards, local checklist steps, gear inventory, and saved map context.",
-                style = MaterialTheme.typography.bodyMedium,
-            )
-        }
+        Text(
+            text = workflow.id.title,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+        )
         if (workflow.missingDataWarnings.isNotEmpty()) {
             MissingDataPanel(workflow.missingDataWarnings)
         }
@@ -384,7 +378,7 @@ private fun WorkflowDetail(
 
 @Composable
 private fun WorkflowGuideBullets(workflow: GuidedWorkflowResult) {
-    WorkflowPanel("Source-backed steps") {
+    WorkflowPanel("Steps") {
         if (workflow.guideBullets.isEmpty()) {
             EmptyText("No guide-card steps are available for this workflow.")
         }
@@ -416,7 +410,7 @@ private fun WorkflowGuideBullets(workflow: GuidedWorkflowResult) {
 
 @Composable
 private fun WorkflowChecklistSteps(workflow: GuidedWorkflowResult) {
-    WorkflowPanel("Matching checklist steps") {
+    WorkflowPanel("Your checklist") {
         if (workflow.checklistSteps.isEmpty()) {
             EmptyText("No matching local checklist items.")
         }
@@ -444,7 +438,7 @@ private fun WorkflowChecklistSteps(workflow: GuidedWorkflowResult) {
 
 @Composable
 private fun WorkflowGearContext(workflow: GuidedWorkflowResult) {
-    WorkflowPanel("Gear context") {
+    WorkflowPanel("Your gear") {
         if (workflow.availableGear.isEmpty() && workflow.missingGear.isEmpty()) {
             EmptyText("No matching gear inventory items.")
         }
@@ -484,7 +478,7 @@ private fun GearLine(
 
 @Composable
 private fun WorkflowLocationContext(locationFacts: List<String>) {
-    WorkflowPanel("Location context") {
+    WorkflowPanel("Location") {
         if (locationFacts.isEmpty()) {
             EmptyText("No saved map context is attached to this workflow.")
         }
@@ -525,9 +519,6 @@ private fun WorkflowSourceLinks(
                         fontWeight = FontWeight.SemiBold,
                     )
                     MetadataLine("Source", item.provenance?.sourceTitle)
-                    MetadataLine("Citation", item.provenance?.citation)
-                    MetadataLine("URL", item.provenance?.sourceUrl)
-                    MetadataLine("Review", item.provenance?.reviewStatus ?: item.pack?.reviewStatus)
                 }
             }
         }
@@ -699,13 +690,10 @@ private fun GuideCardListRow(
             Text(
                 text = item.card.summary,
                 style = MaterialTheme.typography.bodyMedium,
-                maxLines = 3,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
             MetadataLine("Category", item.card.category)
-            MetadataLine("Source", item.provenance?.sourceTitle)
-            MetadataLine("Review", item.provenance?.reviewStatus ?: item.pack?.reviewStatus)
-            MetadataLine("License", item.provenance?.license ?: item.pack?.license)
         }
     }
 }
