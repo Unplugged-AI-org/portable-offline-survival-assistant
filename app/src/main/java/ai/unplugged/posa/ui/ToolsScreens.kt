@@ -554,31 +554,137 @@ private fun GearTab(
     onDeleteGearItem: (item: GearItem) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        GearItemEditor(
-            header = "New gear or tool",
-            initialItem = null,
-            onSave = onCreateGearItem,
-            onDelete = null,
-        )
+        NewGearForm(onCreateGearItem)
         if (!state.isLoading && state.gear.isEmpty()) {
             EmptyToolsText("No gear or tools are stored locally.")
         }
         state.gear.forEach { item ->
-            GearItemEditor(
-                header = item.name,
-                initialItem = item,
-                onSave = { draft -> onUpdateGearItem(item, draft) },
-                onDelete = { onDeleteGearItem(item) },
+            GearItemCard(
+                item = item,
+                onUpdateGearItem = onUpdateGearItem,
+                onDeleteGearItem = onDeleteGearItem,
             )
         }
     }
 }
 
 @Composable
-private fun GearItemEditor(
-    header: String,
+private fun NewGearForm(
+    onCreateGearItem: (draft: GearItemDraft) -> Unit,
+) {
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    if (!expanded) {
+        OutlinedButton(
+            onClick = { expanded = true },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.Add,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+            )
+            Text("New gear or tool")
+        }
+        return
+    }
+
+    PanelSurface {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(
+                text = "New gear or tool",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            GearItemForm(
+                initialItem = null,
+                onSubmit = {
+                    onCreateGearItem(it)
+                    expanded = false
+                },
+                onCancel = { expanded = false },
+                onDelete = null,
+            )
+        }
+    }
+}
+
+@Composable
+private fun GearItemCard(
+    item: GearItem,
+    onUpdateGearItem: (item: GearItem, draft: GearItemDraft) -> Unit,
+    onDeleteGearItem: (item: GearItem) -> Unit,
+) {
+    var expanded by rememberSaveable(item.id) { mutableStateOf(false) }
+    val hasMore = !item.condition.isNullOrBlank() || !item.notes.isNullOrBlank()
+
+    PanelSurface {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded },
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text(
+                        text = item.name.ifBlank { "Untitled gear" },
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = item.gearSummary(),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.secondary,
+                    )
+                }
+                if (hasMore && !expanded) {
+                    Icon(
+                        imageVector = Icons.Outlined.Notes,
+                        contentDescription = "Has condition or notes",
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Icon(
+                    imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                    contentDescription = if (expanded) "Collapse gear" else "Expand gear",
+                )
+            }
+
+            if (expanded) {
+                HorizontalDivider()
+                GearItemForm(
+                    initialItem = item,
+                    onSubmit = { onUpdateGearItem(item, it) },
+                    onCancel = null,
+                    onDelete = { onDeleteGearItem(item) },
+                )
+            }
+        }
+    }
+}
+
+private fun GearItem.gearSummary(): String = buildString {
+    append("Qty ")
+    append(quantity)
+    category?.takeIf { it.isNotBlank() }?.let {
+        append(" · ")
+        append(it)
+    }
+    append(if (isAvailable) " · Have" else " · Missing")
+}
+
+@Composable
+private fun GearItemForm(
     initialItem: GearItem?,
-    onSave: (GearItemDraft) -> Unit,
+    onSubmit: (GearItemDraft) -> Unit,
+    onCancel: (() -> Unit)?,
     onDelete: (() -> Unit)?,
 ) {
     val resetKey = initialItem?.id ?: "new-gear"
@@ -595,122 +701,122 @@ private fun GearItemEditor(
     }
     var formError by rememberSaveable(resetKey, resetVersion) { mutableStateOf<String?>(null) }
 
-    PanelSurface {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+    fun clear() {
+        name = ""
+        category = ""
+        quantity = "1"
+        condition = ""
+        notes = ""
+        isAvailable = true
+        formError = null
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = if (isAvailable) "Have" else "Missing",
+                style = MaterialTheme.typography.labelMedium,
+            )
+            Switch(
+                checked = isAvailable,
+                onCheckedChange = { isAvailable = it },
+            )
+        }
+        OutlinedTextField(
+            value = name,
+            onValueChange = { name = it },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            label = { Text("Name") },
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                value = category,
+                onValueChange = { category = it },
+                modifier = Modifier.weight(1f),
+                singleLine = true,
+                label = { Text("Category") },
+            )
+            OutlinedTextField(
+                value = quantity,
+                onValueChange = { quantity = it },
+                modifier = Modifier.weight(1f),
+                singleLine = true,
+                label = { Text("Quantity") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            )
+        }
+        OutlinedTextField(
+            value = condition,
+            onValueChange = { condition = it },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            label = { Text("Condition") },
+        )
+        OutlinedTextField(
+            value = notes,
+            onValueChange = { notes = it },
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 2,
+            label = { Text("Notes") },
+        )
+        formError?.let { ErrorText(it) }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                onClick = {
+                    val parsedQuantity = quantity.trim().toIntOrNull()
+                    if (name.isBlank()) {
+                        formError = "Name is required."
+                    } else if (parsedQuantity == null || parsedQuantity < 0) {
+                        formError = "Quantity must be zero or greater."
+                    } else {
+                        formError = null
+                        onSubmit(
+                            GearItemDraft(
+                                name = name.trim(),
+                                category = category.trim().blankToNull(),
+                                quantity = parsedQuantity,
+                                condition = condition.trim().blankToNull(),
+                                notes = notes.trim().blankToNull(),
+                                isAvailable = isAvailable,
+                            ),
+                        )
+                        if (initialItem == null) {
+                            clear()
+                        }
+                    }
+                },
+                enabled = name.isNotBlank(),
             ) {
-                Text(
-                    text = header,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
+                Icon(
+                    imageVector = Icons.Outlined.Save,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
                 )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                Text(if (initialItem == null) "Add gear" else "Save")
+            }
+            onCancel?.let { cancel ->
+                TextButton(
+                    onClick = {
+                        if (initialItem == null) clear()
+                        cancel()
+                    },
                 ) {
-                    Text(
-                        text = if (isAvailable) "Have" else "Missing",
-                        style = MaterialTheme.typography.labelMedium,
-                    )
-                    Switch(
-                        checked = isAvailable,
-                        onCheckedChange = { isAvailable = it },
-                    )
+                    Text("Cancel")
                 }
             }
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                label = { Text("Name") },
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = category,
-                    onValueChange = { category = it },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true,
-                    label = { Text("Category") },
-                )
-                OutlinedTextField(
-                    value = quantity,
-                    onValueChange = { quantity = it },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true,
-                    label = { Text("Quantity") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                )
-            }
-            OutlinedTextField(
-                value = condition,
-                onValueChange = { condition = it },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                label = { Text("Condition") },
-            )
-            OutlinedTextField(
-                value = notes,
-                onValueChange = { notes = it },
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 2,
-                label = { Text("Notes") },
-            )
-            formError?.let { ErrorText(it) }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = {
-                        val parsedQuantity = quantity.trim().toIntOrNull()
-                        if (name.isBlank()) {
-                            formError = "Name is required."
-                        } else if (parsedQuantity == null || parsedQuantity < 0) {
-                            formError = "Quantity must be zero or greater."
-                        } else {
-                            formError = null
-                            onSave(
-                                GearItemDraft(
-                                    name = name.trim(),
-                                    category = category.trim().blankToNull(),
-                                    quantity = parsedQuantity,
-                                    condition = condition.trim().blankToNull(),
-                                    notes = notes.trim().blankToNull(),
-                                    isAvailable = isAvailable,
-                                ),
-                            )
-                            if (initialItem == null) {
-                                name = ""
-                                category = ""
-                                quantity = "1"
-                                condition = ""
-                                notes = ""
-                                isAvailable = true
-                            }
-                        }
-                    },
-                    enabled = name.isNotBlank(),
-                ) {
+            onDelete?.let { delete ->
+                OutlinedButton(onClick = delete) {
                     Icon(
-                        imageVector = Icons.Outlined.Save,
+                        imageVector = Icons.Outlined.Delete,
                         contentDescription = null,
                         modifier = Modifier.size(18.dp),
                     )
-                    Text("Save")
-                }
-                onDelete?.let { delete ->
-                    OutlinedButton(onClick = delete) {
-                        Icon(
-                            imageVector = Icons.Outlined.Delete,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp),
-                        )
-                        Text("Delete")
-                    }
+                    Text("Delete")
                 }
             }
         }
