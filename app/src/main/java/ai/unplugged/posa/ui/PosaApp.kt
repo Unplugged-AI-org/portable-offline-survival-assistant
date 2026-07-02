@@ -156,8 +156,10 @@ private fun DestinationScreen(
                 .padding(horizontal = 20.dp, vertical = 24.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
-            DestinationHeader(destination)
-            OfflineStatus(destination.offlineState)
+            // Tools drops the explainer header; onboarding will cover usage later.
+            if (destination != PosaDestination.Tools) {
+                DestinationHeader(destination)
+            }
             when (destination) {
                 PosaDestination.Guide -> GuideDestination(
                     guideViewModel = guideViewModel,
@@ -279,31 +281,6 @@ private fun DestinationHeader(destination: PosaDestination) {
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onBackground,
         )
-    }
-}
-
-@Composable
-private fun OfflineStatus(text: String) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-        shape = RoundedCornerShape(8.dp),
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Text(
-                text = "Offline-first status",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Text(
-                text = text,
-                style = MaterialTheme.typography.bodyMedium,
-            )
-        }
     }
 }
 
