@@ -12,21 +12,23 @@ This does not mean POSA will try to compete with Organic Maps or OsmAnd in v0. T
 
 Phase 5 should implement:
 
-- Mapsforge dependency spike.
-- Render one local test `.map` file.
-- Current GPS coordinates.
-- Save waypoint.
-- Waypoint list and details.
-- Distance and bearing.
-- Breadcrumb recording.
-- OSM attribution.
+- Mapsforge dependency spike. Implemented with Maven Central `org.mapsforge` Android artifacts.
+- Render one local test `.map` file. Implemented with a tiny bundled `maps/monaco.map` asset.
+- Current GPS coordinates. Implemented behind Android fine/coarse location permission.
+- Save waypoint. Implemented from current device location.
+- Waypoint list and details. Implemented in the Map tab.
+- Distance and bearing. Implemented from the current fix to selected/saved waypoints.
+- Breadcrumb recording. Implemented with start/stop and locally stored points.
+- OSM attribution. Implemented in map UI and repository docs.
 
-Phase 6 should implement:
+Phase 6 implements:
 
-- Android file picker import for supported map files.
-- Installed map metadata.
-- Enable/disable map areas.
-- Clear errors for unsupported or missing files.
+- Android file picker import for supported Mapsforge `.map` files.
+- Local copy into app-private storage so imported areas remain available offline.
+- Installed map metadata in Room, including Mapsforge start position, optional start zoom, and bounding box-derived viewport data.
+- Enable/disable controls for installed map areas. Importing or enabling a map makes it the active offline area and disables other installed maps.
+- Automatic viewport focus for the active installed map on import, enable, and app restart. The bundled Monaco fixture is used only when no installed map is enabled.
+- Clear errors for unsupported, unreadable, empty, or missing files.
 
 ## Out Of Scope For v0
 
@@ -43,6 +45,18 @@ Phase 6 should implement:
 OpenStreetMap-derived data has licensing and attribution obligations. POSA must preserve attribution in app UI and docs wherever OSM-derived map data is used.
 
 Do not build a feature that bulk-downloads public OSM tiles. POSA should use user-loaded offline map files, bundled tiny test fixtures if licensing allows, or a clearly documented future map-pack pipeline.
+
+Phase 5 bundles `app/src/main/assets/maps/monaco.map` as a small local Mapsforge rendering fixture:
+
+- Source: https://download.mapsforge.org/maps/v5/europe/monaco.map
+- Source index size: 342K on 2026-07-01
+- Purpose: local renderer verification only, not a production map area.
+
+For Phase 6 development and manual testing, use supported Mapsforge `.map` files from the Mapsforge public download index:
+
+- https://download.mapsforge.org/maps/v5/
+
+Prefer the smallest suitable region file when testing imports. User-loaded maps should be treated as user-provided offline data; POSA should not bulk-download OpenStreetMap public tiles or silently add large map datasets to the base app.
 
 Relevant references:
 
