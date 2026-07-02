@@ -66,28 +66,12 @@ fun PosaApp(database: PosaDatabase? = null) {
 
     PosaTheme {
         Scaffold(
+            // The Map tab is a full-screen, ATAK-style map: no top app bar, its own
+            // in-map menu button provides the tools.
             topBar = {
-                TopAppBar(
-                    title = {
-                        Column {
-                            Text(
-                                text = "POSA",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                            )
-                            Text(
-                                text = "Portable Offline Survival Assistant",
-                                style = MaterialTheme.typography.bodySmall,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        titleContentColor = MaterialTheme.colorScheme.onSurface,
-                    ),
-                )
+                if (selectedDestination != PosaDestination.Map) {
+                    PosaTopBar()
+                }
             },
             bottomBar = {
                 NavigationBar {
@@ -118,6 +102,32 @@ fun PosaApp(database: PosaDatabase? = null) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PosaTopBar() {
+    TopAppBar(
+        title = {
+            Column {
+                Text(
+                    text = "POSA",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = "Portable Offline Survival Assistant",
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        },
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = MaterialTheme.colorScheme.surface,
+            titleContentColor = MaterialTheme.colorScheme.onSurface,
+        ),
+    )
+}
+
 @Composable
 private fun DestinationScreen(
     destination: PosaDestination,
@@ -126,6 +136,13 @@ private fun DestinationScreen(
     toolsViewModel: ToolsViewModel,
     mapViewModel: MapViewModel,
 ) {
+    // Map is full-bleed: it manages its own layout and insets rather than the
+    // header + scrolling-column wrapper the other tabs use.
+    if (destination == PosaDestination.Map) {
+        MapDestination(mapViewModel, contentPadding)
+        return
+    }
+
     Surface(
         modifier = Modifier
             .fillMaxSize()
@@ -152,7 +169,7 @@ private fun DestinationScreen(
                     PacksSection(guideContentState)
                 }
                 PosaDestination.Tools -> ToolsDestination(toolsViewModel)
-                PosaDestination.Map -> MapDestination(mapViewModel)
+                PosaDestination.Map -> Unit // handled full-screen above
             }
         }
     }
@@ -222,12 +239,13 @@ private fun ToolsDestination(toolsViewModel: ToolsViewModel) {
 }
 
 @Composable
-private fun MapDestination(mapViewModel: MapViewModel) {
+private fun MapDestination(mapViewModel: MapViewModel, contentPadding: PaddingValues) {
     val mapContentState by mapViewModel.state.collectAsState()
     val selectedWaypointId by mapViewModel.selectedWaypointId.collectAsState()
     MapSection(
         state = mapContentState,
         selectedWaypointId = selectedWaypointId,
+        contentPadding = contentPadding,
         onSelectWaypoint = mapViewModel::selectWaypoint,
         actions = MapActions(
             onImportMap = mapViewModel::importMap,
