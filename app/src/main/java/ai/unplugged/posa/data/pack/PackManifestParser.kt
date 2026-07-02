@@ -97,6 +97,7 @@ object PackManifestParser {
                 provenanceId = provenanceId,
                 createdAtEpochMillis = nowEpochMillis,
                 updatedAtEpochMillis = nowEpochMillis,
+                workflowTags = metadata.optionalValue("workflow_tags").toWorkflowTags(),
             ),
             provenance = Provenance(
                 id = provenanceId,
@@ -164,4 +165,11 @@ object PackManifestParser {
                 .toInstant()
                 .toEpochMilli()
         }
+
+    private fun String?.toWorkflowTags(): List<String> =
+        orEmpty()
+            .split(',')
+            .map { it.trim().lowercase() }
+            .filter { it.isNotBlank() }
+            .distinct()
 }

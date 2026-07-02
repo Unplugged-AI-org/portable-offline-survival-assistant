@@ -1,7 +1,10 @@
 package ai.unplugged.posa.data.local
 
 import ai.unplugged.posa.data.local.repository.repositories
+import ai.unplugged.posa.data.model.GuideCard
 import ai.unplugged.posa.data.model.InstalledMap
+import ai.unplugged.posa.data.model.Pack
+import ai.unplugged.posa.data.model.Provenance
 import ai.unplugged.posa.data.model.Waypoint
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
@@ -33,14 +36,18 @@ class PosaDatabaseMigrationTest {
     }
 
     @Test
-    fun migrationFromOneToThreePreservesExistingDataAndAddsInstalledMapViewportColumns() = runTest {
+    fun migrationFromOneToFourPreservesExistingDataAndAddsNewColumns() = runTest {
         createVersionOneDatabase()
 
         val database = Room.databaseBuilder(
             context,
             PosaDatabase::class.java,
             TEST_DATABASE_NAME,
-        ).addMigrations(PosaDatabase.MIGRATION_1_2, PosaDatabase.MIGRATION_2_3).build()
+        ).addMigrations(
+            PosaDatabase.MIGRATION_1_2,
+            PosaDatabase.MIGRATION_2_3,
+            PosaDatabase.MIGRATION_3_4,
+        ).build()
 
         try {
             val repositories = database.repositories()
@@ -66,6 +73,54 @@ class PosaDatabaseMigrationTest {
             repositories.installedMaps.save(installedMap)
 
             assertEquals(listOf(installedMap), repositories.installedMaps.listEnabled())
+
+            val pack = Pack(
+                id = "pack",
+                title = "Pack",
+                version = "1",
+                category = null,
+                description = null,
+                packType = "official",
+                license = "NOASSERTION",
+                sourceName = null,
+                sourceUrl = null,
+                author = null,
+                lastReviewedEpochMillis = null,
+                reviewStatus = "draft",
+                installedAtEpochMillis = NOW,
+                updatedAtEpochMillis = NOW,
+                isBundled = true,
+            )
+            val provenance = Provenance(
+                id = "source-card",
+                sourceTitle = "Source",
+                sourceUrl = null,
+                citation = null,
+                license = null,
+                reviewStatus = "draft",
+                reviewedBy = null,
+                reviewedAtEpochMillis = null,
+                notes = null,
+            )
+            val guideCard = GuideCard(
+                id = "card",
+                packId = pack.id,
+                title = "Navigation",
+                category = "navigation",
+                summary = "Navigation summary.",
+                bodyMarkdown = "## Field Use\n\n- Stop and plan.",
+                warnings = null,
+                sortOrder = 1,
+                provenanceId = provenance.id,
+                createdAtEpochMillis = NOW,
+                updatedAtEpochMillis = NOW,
+                workflowTags = listOf("lost", "signal"),
+            )
+            repositories.packs.save(pack)
+            repositories.provenance.save(provenance)
+            repositories.guideCards.save(guideCard)
+
+            assertEquals(guideCard, repositories.guideCards.get(guideCard.id))
         } finally {
             database.close()
         }

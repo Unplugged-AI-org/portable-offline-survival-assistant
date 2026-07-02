@@ -3,6 +3,7 @@ id: navigation
 title: Navigation Baseline
 category: navigation
 summary: Carry offline navigation tools, tell someone your route, and stop early when position is uncertain.
+workflow_tags: lost,signal,battery
 warnings: Phones and GPS devices can fail from battery, damage, terrain, or signal limits. Carry a physical backup you can use.
 source_title: USDA Forest Service - If You Get Lost
 source_url: https://www.fs.usda.gov/visit/know-before-you-go/if-you-get-lost

@@ -10,7 +10,10 @@ source of truth: update the "Current State Snapshot" as departments land work.
 - Branch per department (e.g. `ui-architecture`, `maps-overlays`); one concern per PR.
 - First department: **UI Architecture** — ✅ **landed** on branch `ui-architecture`
   via incremental ViewModel extraction (app built and tested after each step).
-  Next up: parallelize **Maps** (#2) and the content/retrieval track (#3→#4, #5→#4).
+- Maps department overlay core — ✅ **landed** on branch `maps-overlays`, followed
+  by long-press/tap polish on `maps-longpress-waypoint` and `fix-longpress-npe`.
+  Next up: manual device/emulator verification, then parallelize the
+  content/retrieval track (#3→#4, #5→#4).
 
 ---
 
@@ -25,20 +28,21 @@ source of truth: update the "Current State Snapshot" as departments land work.
   binding composables. Cross-domain refresh isolated to two documented callbacks
   (`MapViewModel.onDataChanged`, `GuideViewModel.onGuidePackInstalled` →
   `ToolsViewModel.reload()`). 14 new ViewModel unit tests.
-- Data layer: 11 Room entities, 9 DAOs, 9 repositories, mappers, 2 migrations
-  (v1→v3), in-memory test support. Well tested.
+- Data layer: 11 Room entities, 9 DAOs, 9 repositories, mappers, 3 migrations
+  (v1→v4), in-memory test support. Well tested.
 - Content pipeline: bundled `wilderness-basics` pack (6 draft cards), manifest +
-  YAML front-matter parser, provenance model, LIKE-based search.
+  YAML front-matter parser, workflow tags, provenance model, LIKE-based search.
 - Maps: Mapsforge renders bundled Monaco fixture + user-imported `.map` files;
-  GPS, distance/bearing, breadcrumb recording all persist.
+  GPS, distance/bearing, waypoint save/list/detail, breadcrumb recording, waypoint
+  marker overlays, breadcrumb trail polylines, current-location dot/accuracy/heading,
+  long-press waypoint creation, and waypoint-pin tap inspection are implemented.
 - Guide: Ask (retrieval) + Workflows + Cards tabs; deterministic, cited, with an
   "I do not know from installed sources" fallback.
-- Tests: 10 unit-test classes / 27 methods; data layer + retrieval + workflows
-  well covered.
+- Tests: 14 unit-test classes / 51 methods; data layer, parser, retrieval, workflows, and
+  ViewModel state transitions are covered.
 
-> Note: the Guide "Ask"/Workflows (phases 7–8) currently live on the unmerged
-> `phase-8-retrieval-rag` branch. Merge that before or alongside starting the
-> Guide/Retrieval departments.
+> Note: Guide "Ask"/Workflows (phases 7–8) are present in the current tree. The
+> remaining Guide/Retrieval work is quality and depth work, not initial merge work.
 
 **Known gaps / debt (the raw material for the departments):**
 - ~~`PosaApp.kt` is a 773-line monolith~~ **RESOLVED** by the UI Architecture
@@ -46,14 +50,16 @@ source of truth: update the "Current State Snapshot" as departments land work.
   callbacks are a clean interim boundary but still couple tools to map/guide
   writes; genuinely cutting them (tools load reacting to the waypoint/guide-card
   repositories directly) is a Local Data / Retrieval concern, not UI work.
-- Maps: waypoints, breadcrumbs, and current location are **text lists only** —
-  nothing is drawn on the map surface.
-- Guide content is thin (6 cards) and workflow term-matching is hardcoded and
-  fragile (string lists coupled to card titles/categories).
-- Retrieval is naive substring scoring: no stemming/synonyms, English/US-locale
-  baked in, hand-maintained STOP_WORDS / MAP_CONTEXT_TERMS, arbitrary constants.
-- No CI (`.github/workflows` has only issue templates). No Compose UI tests. No
-  `PackManifestParser` tests. No coverage reporting.
+- Maps: overlay core is implemented, but still needs manual device/emulator QA with
+  the bundled Monaco fixture and at least one imported user map area.
+- Guide content is thin (6 cards). Guide-card workflow membership is now
+  data-driven via front-matter `workflow_tags`, but checklist/gear workflow matching
+  still uses hardcoded terms.
+- Retrieval still uses in-memory substring scoring. First-pass synonym expansion has
+  landed, but there is no stemming, phrase/proximity weighting, externalized term
+  config, or FTS-backed search yet.
+- Minimal CI has landed. Remaining QA/release debt: no Compose UI tests, no
+  coverage reporting.
 
 ---
 
@@ -83,7 +89,7 @@ plus new `ui/MapViewModel.kt`, `ui/ToolsViewModel.kt`, `ui/GuideViewModel.kt`.
 6. ✅ Unit tests for each ViewModel (state transitions, mutation effects) — 14 new tests.
 
 **Dependencies:** none upstream. Everything else builds on this, so it goes first.
-**Verify:** ✅ app builds (`:app:assembleDebug`), all unit tests pass (44 total,
+**Verify:** ✅ app builds (`:app:assembleDebug`), all unit tests pass (51 total,
 incl. new ViewModel tests).
 
 ### 2. Maps
@@ -93,17 +99,24 @@ incl. new ViewModel tests).
 `BreadcrumbPanel`), `ui/MapContent.kt`, `data/.../InstalledMapImporter.kt`, `ui/MapMath.kt`.
 
 **Tasks:**
-1. Render **waypoint markers** as a Mapsforge overlay; persist across restart;
+1. ✅ Render **waypoint markers** as a Mapsforge overlay; persist across restart;
    remove on delete; tapping a waypoint row centers/zooms to it. (Existing
    `docs/initial-issues.md` backlog item.)
-2. Render **breadcrumb trails** as polylines on the map.
-3. Render a **current-location** marker/dot that follows GPS updates.
-4. Optional: tap-on-map to create a waypoint; long-press context.
+2. ✅ Render **breadcrumb trails** as polylines on the map.
+3. ✅ Render a **current-location** marker/dot that follows GPS updates, with
+   accuracy ring and heading cone when available.
+4. ✅ Long-press the map to create a waypoint; tapping waypoint pins opens details
+   with edit/delete actions.
+5. ⏳ Manual QA: bundled Monaco map, imported `.map`, save/delete waypoint, row
+   centering, pin tap, long-press creation, breadcrumb recording, current-location
+   marker/recenter behavior.
 
 **Dependencies:** cleaner if UI Architecture lands first (overlay state in MapViewModel),
 but the Mapsforge layer code is self-contained and can start in parallel if needed.
-**Verify:** run app with bundled Monaco map; save waypoints → markers appear/persist/delete;
-record a breadcrumb → polyline shows.
+**Verify:** unit tests pass (`:app:testDebugUnitTest`). Still run app with bundled
+Monaco map and an imported map; save waypoints → markers appear/persist/delete;
+record a breadcrumb → polyline shows; confirm current-location dot/recenter behavior
+on a device or emulator with a location fix.
 
 ### 3. Guide / Workflows
 **Goal:** make guidance more organized and genuinely useful; de-hardcode matching.
@@ -118,10 +131,11 @@ record a breadcrumb → polyline shows.
    fire ignition reliability, shelter site selection, signal priority).
 2. Expand/restructure guide cards; consider card-to-card links ("next"/prereq) and
    sub-categories.
-3. Replace hardcoded `GuidedWorkflowDefinition` term lists with a data-driven mapping
+3. ✅ Replace hardcoded `GuidedWorkflowDefinition` term lists with a data-driven mapping
    (e.g. workflow tags in card front-matter) so content changes don't silently break
-   workflows.
-4. Add `PackManifestParser` tests (currently none) and workflow content tests.
+   workflows. Guide cards now store parsed `workflow_tags`; legacy untagged cards
+   still fall back to term matching.
+4. ✅ Add `PackManifestParser` tests and workflow content tests.
 
 **Dependencies:** feeds Retrieval. Light coupling to Local Data if front-matter schema changes.
 **Verify:** pack installs; each workflow composes expected cards; parser tests pass.
@@ -134,9 +148,10 @@ record a breadcrumb → polyline shows.
 **Tasks:**
 1. Move retrieval to a data-layer/service class (Compose-independent); consider
    **SQLite FTS** instead of in-memory substring scoring.
-2. Improve ranking: stemming/normalization, synonym map (signal↔signaling),
+2. ⏳ Improve ranking: stemming/normalization, synonym map (signal↔signaling),
    phrase/proximity weighting, replace arbitrary constants with tuned + documented
-   values; keep the "unknown from installed sources" guarantee.
+   values; keep the "unknown from installed sources" guarantee. First-pass synonym
+   expansion is implemented and covered for water-treatment and signaling queries.
 3. Externalize STOP_WORDS / MAP_CONTEXT_TERMS (config/resource, not source).
 4. **Heavy test suite:** realistic query corpus, typo/edge cases, ranking regression
    tests, guarantee no unsupported-claim leakage.

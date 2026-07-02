@@ -3,6 +3,7 @@ id: signaling
 title: Staying Findable
 category: signaling
 summary: Make yourself easier to locate before moving farther from a known point.
+workflow_tags: lost,signal
 warnings: A signal plan does not guarantee rescue. Contact emergency services when available and follow local emergency procedures.
 source_title: USDA Forest Service - If You Get Lost
 source_url: https://www.fs.usda.gov/visit/know-before-you-go/if-you-get-lost

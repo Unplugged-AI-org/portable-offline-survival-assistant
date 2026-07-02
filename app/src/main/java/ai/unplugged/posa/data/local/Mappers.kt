@@ -257,6 +257,7 @@ internal fun GuideCardEntity.toModel(): GuideCard = GuideCard(
     provenanceId = provenanceId,
     createdAtEpochMillis = createdAtEpochMillis,
     updatedAtEpochMillis = updatedAtEpochMillis,
+    workflowTags = workflowTags.toWorkflowTagList(),
 )
 
 internal fun GuideCard.toEntity(): GuideCardEntity = GuideCardEntity(
@@ -271,6 +272,7 @@ internal fun GuideCard.toEntity(): GuideCardEntity = GuideCardEntity(
     provenanceId = provenanceId,
     createdAtEpochMillis = createdAtEpochMillis,
     updatedAtEpochMillis = updatedAtEpochMillis,
+    workflowTags = workflowTags.toWorkflowTagStorage(),
 )
 
 internal fun ProvenanceEntity.toModel(): Provenance = Provenance(
@@ -296,3 +298,17 @@ internal fun Provenance.toEntity(): ProvenanceEntity = ProvenanceEntity(
     reviewedAtEpochMillis = reviewedAtEpochMillis,
     notes = notes,
 )
+
+private fun String?.toWorkflowTagList(): List<String> =
+    orEmpty()
+        .split(',')
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .distinct()
+
+private fun List<String>.toWorkflowTagStorage(): String? =
+    map { it.trim() }
+        .filter { it.isNotBlank() }
+        .distinct()
+        .takeIf { it.isNotEmpty() }
+        ?.joinToString(",")

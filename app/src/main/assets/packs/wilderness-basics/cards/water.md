@@ -3,6 +3,7 @@ id: water
 title: Water Planning
 category: water
 summary: Plan water before walking and carry a treatment method you already know how to use.
+workflow_tags: water
 warnings: Natural water can contain hazards that are not visible. Treat collected water when possible and follow local advisories.
 source_title: National Park Service - Ten Essentials
 source_url: https://www.nps.gov/articles/10essentials.htm

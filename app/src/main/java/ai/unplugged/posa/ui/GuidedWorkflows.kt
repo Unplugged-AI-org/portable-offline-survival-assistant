@@ -10,13 +10,14 @@ import java.util.Locale
 internal enum class GuidedWorkflowId(
     val title: String,
     val actionLabel: String,
+    val workflowTag: String,
 ) {
-    Water("I need water", "Water"),
-    Lost("I am lost", "Lost"),
-    Shelter("I need shelter", "Shelter"),
-    Fire("I need fire", "Fire"),
-    Signal("I need to signal", "Signal"),
-    Battery("Save battery", "Battery"),
+    Water("I need water", "Water", "water"),
+    Lost("I am lost", "Lost", "lost"),
+    Shelter("I need shelter", "Shelter", "shelter"),
+    Fire("I need fire", "Fire", "fire"),
+    Signal("I need to signal", "Signal", "signal"),
+    Battery("Save battery", "Battery", "battery"),
 }
 
 internal data class GuidedWorkflowResult(
@@ -59,7 +60,7 @@ internal fun buildGuidedWorkflows(
     val sourceCards = guideState.allCards.ifEmpty { guideState.cards }
     return definitions.map { definition ->
         val guideCards = sourceCards
-            .filter { it.card.matchesAny(definition.guideTerms) }
+            .filter { it.card.matchesWorkflow(definition) }
             .sortedWith(
                 compareBy<GuideCardItem>(
                     { it.card.sortOrder },
@@ -199,6 +200,13 @@ private fun MapContentState.locationFactsFor(definition: GuidedWorkflowDefinitio
 
 private fun MapContentState.hasLocationContext(): Boolean =
     activeInstalledMap != null || activeTrail != null || waypoints.isNotEmpty()
+
+private fun GuideCard.matchesWorkflow(definition: GuidedWorkflowDefinition): Boolean =
+    if (workflowTags.isNotEmpty()) {
+        definition.id.workflowTag in workflowTags.map { it.lowercase(Locale.US) }
+    } else {
+        matchesAny(definition.guideTerms)
+    }
 
 private fun GuideCard.matchesAny(terms: List<String>): Boolean =
     searchableText(

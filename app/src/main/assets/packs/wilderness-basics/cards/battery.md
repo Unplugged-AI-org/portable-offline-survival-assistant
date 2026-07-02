@@ -3,6 +3,7 @@ id: battery
 title: Battery Conservation
 category: power
 summary: Protect device power for navigation, light, and emergency communication attempts.
+workflow_tags: lost,signal,battery
 warnings: Do not rely on a phone as the only navigation or signaling tool.
 source_title: National Park Service - Ten Essentials
 source_url: https://www.nps.gov/articles/10essentials.htm

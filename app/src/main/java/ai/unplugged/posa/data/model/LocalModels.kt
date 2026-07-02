@@ -123,6 +123,7 @@ data class GuideCard(
     val provenanceId: String?,
     val createdAtEpochMillis: Long,
     val updatedAtEpochMillis: Long,
+    val workflowTags: List<String> = emptyList(),
 )
 
 data class Provenance(

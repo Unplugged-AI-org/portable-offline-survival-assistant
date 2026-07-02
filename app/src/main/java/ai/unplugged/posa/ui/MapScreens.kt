@@ -48,6 +48,7 @@ import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -60,6 +61,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -105,6 +107,7 @@ internal data class MapActions(
     val onSetInstalledMapEnabled: (InstalledMap, Boolean) -> Unit,
     val onDeleteInstalledMap: (InstalledMap) -> Unit,
     val onSaveWaypoint: (name: String, notes: String?, coordinate: FieldCoordinate) -> Unit,
+    val onUpdateWaypoint: (waypoint: Waypoint, name: String, notes: String?) -> Unit,
     val onDeleteWaypoint: (waypoint: Waypoint) -> Unit,
     val onStartBreadcrumb: (coordinate: FieldCoordinate?) -> Unit,
     val onStopBreadcrumb: (trail: BreadcrumbTrail) -> Unit,
@@ -142,6 +145,8 @@ internal fun MapSection(
     }
     var toolsSheetOpen by rememberSaveable { mutableStateOf(false) }
     var pendingWaypointCoordinate by remember { mutableStateOf<FieldCoordinate?>(null) }
+    var detailWaypointId by remember { mutableStateOf<String?>(null) }
+    var editingWaypointId by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(activeTrail?.trail?.id, currentLocation?.recordedAtEpochMillis) {
         if (activeTrail != null && currentLocation != null) {
@@ -162,6 +167,7 @@ internal fun MapSection(
             currentLocation = currentLocation,
             headingDegrees = headingDegrees,
             onMapLongPress = { pendingWaypointCoordinate = it },
+            onWaypointTap = { detailWaypointId = it },
             modifier = Modifier.fillMaxSize(),
         )
 
@@ -237,8 +243,10 @@ internal fun MapSection(
         }
     }
 
+    // Drop a new waypoint at a long-pressed coordinate.
     pendingWaypointCoordinate?.let { coordinate ->
-        NewWaypointDialog(
+        WaypointFormDialog(
+            title = "Drop waypoint",
             coordinate = coordinate,
             onDismiss = { pendingWaypointCoordinate = null },
             onConfirm = { name, notes ->
@@ -247,20 +255,66 @@ internal fun MapSection(
             },
         )
     }
+
+    // Tapping a waypoint pin opens its details with edit/delete actions.
+    val detailWaypoint = state.waypoints.firstOrNull { it.id == detailWaypointId }
+    if (detailWaypointId != null && detailWaypoint == null) {
+        // The waypoint was deleted out from under the dialog; close it.
+        detailWaypointId = null
+    }
+    detailWaypoint?.let { waypoint ->
+        WaypointDetailDialog(
+            waypoint = waypoint,
+            currentLocation = currentLocation,
+            onDismiss = { detailWaypointId = null },
+            onEdit = {
+                editingWaypointId = waypoint.id
+                detailWaypointId = null
+            },
+            onDelete = {
+                actions.onDeleteWaypoint(waypoint)
+                detailWaypointId = null
+            },
+        )
+    }
+
+    // Edit an existing waypoint's name/notes (coordinate stays fixed).
+    val editingWaypoint = state.waypoints.firstOrNull { it.id == editingWaypointId }
+    if (editingWaypointId != null && editingWaypoint == null) {
+        editingWaypointId = null
+    }
+    editingWaypoint?.let { waypoint ->
+        WaypointFormDialog(
+            title = "Edit waypoint",
+            coordinate = waypoint.toFieldCoordinate(),
+            initialName = waypoint.name,
+            initialNotes = waypoint.notes.orEmpty(),
+            confirmLabel = "Save changes",
+            onDismiss = { editingWaypointId = null },
+            onConfirm = { name, notes ->
+                actions.onUpdateWaypoint(waypoint, name, notes)
+                editingWaypointId = null
+            },
+        )
+    }
 }
 
 @Composable
-private fun NewWaypointDialog(
+private fun WaypointFormDialog(
+    title: String,
     coordinate: FieldCoordinate,
     onDismiss: () -> Unit,
     onConfirm: (name: String, notes: String?) -> Unit,
+    initialName: String = "",
+    initialNotes: String = "",
+    confirmLabel: String = "Save",
 ) {
-    var name by rememberSaveable { mutableStateOf("") }
-    var notes by rememberSaveable { mutableStateOf("") }
+    var name by rememberSaveable(initialName) { mutableStateOf(initialName) }
+    var notes by rememberSaveable(initialNotes) { mutableStateOf(initialNotes) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Drop waypoint") },
+        title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
@@ -289,12 +343,70 @@ private fun NewWaypointDialog(
                 onClick = { onConfirm(name.trim(), notes.trim().blankToNull()) },
                 enabled = name.isNotBlank(),
             ) {
-                Text("Save")
+                Text(confirmLabel)
             }
         },
         dismissButton = {
             OutlinedButton(onClick = onDismiss) {
                 Text("Cancel")
+            }
+        },
+    )
+}
+
+@Composable
+private fun WaypointDetailDialog(
+    waypoint: Waypoint,
+    currentLocation: FieldCoordinate?,
+    onDismiss: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    val distanceBearing = currentLocation?.let {
+        distanceAndBearing(
+            fromLatitude = it.latitude,
+            fromLongitude = it.longitude,
+            toLatitude = waypoint.latitude,
+            toLongitude = waypoint.longitude,
+        )
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(waypoint.name) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = "${formatCoordinate(waypoint.latitude)}, ${formatCoordinate(waypoint.longitude)}",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                waypoint.notes?.let {
+                    Text(text = it, style = MaterialTheme.typography.bodyMedium)
+                }
+                distanceBearing?.let {
+                    Text(
+                        text = "${formatDistance(it.distanceMeters)} away at ${formatBearing(it.bearingDegrees)}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.secondary,
+                    )
+                }
+                Text(
+                    text = "Saved ${waypoint.createdAtEpochMillis.toMapDateTimeLabel()}",
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = onEdit) { Text("Edit") }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDelete,
+                colors = ButtonDefaults.textButtonColors(
+                    contentColor = MaterialTheme.colorScheme.error,
+                ),
+            ) {
+                Text("Delete")
             }
         },
     )
@@ -326,16 +438,22 @@ private fun MapsforgeMapSurface(
     currentLocation: FieldCoordinate?,
     headingDegrees: Float?,
     onMapLongPress: (FieldCoordinate) -> Unit,
+    onWaypointTap: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current.density
-    // Read the latest long-press callback from inside the Mapsforge layer, which is
-    // created once in the AndroidView factory and outlives individual recompositions.
+    // Read the latest callbacks from inside Mapsforge layers, which are created in the
+    // AndroidView factory / overlay rebuilds and outlive individual recompositions.
     val currentOnMapLongPress by rememberUpdatedState(onMapLongPress)
+    val currentOnWaypointTap by rememberUpdatedState(onWaypointTap)
     var mapFile by remember { mutableStateOf<File?>(null) }
     var mapError by remember { mutableStateOf<String?>(null) }
     var appliedViewportKey by remember { mutableStateOf<String?>(null) }
+    // Re-armed each time this surface is (re)composed — i.e. every time the Map tab is
+    // re-entered — so returning to the map recenters on the current location once,
+    // without fighting the user's panning or re-centering on every GPS update.
+    var centeredOnLocation by remember { mutableStateOf(false) }
     val mapViewHolder = remember { mutableStateOf<MapView?>(null) }
     // Overlay z-order (bottom to top): breadcrumb trails, waypoint markers, then the
     // current-location marker. They are added in that order on first render.
@@ -343,10 +461,28 @@ private fun MapsforgeMapSurface(
     val waypointOverlay = remember { WaypointOverlay() }
     val locationOverlay = remember { LocationOverlay() }
     val selectedWaypoint = waypoints.firstOrNull { it.id == selectedWaypointId }
-    val viewport = activeInstalledMap?.viewport() ?: MapViewport(
-        center = selectedWaypoint?.toFieldCoordinate() ?: MONACO_CENTER,
-        zoomLevel = DEFAULT_MAP_ZOOM,
-    )
+    val installedViewport = activeInstalledMap?.viewport()
+
+    // Whether this recomposition should center on the current location: only when no
+    // waypoint is explicitly selected and we haven't already centered on location.
+    val centeringOnLocation = selectedWaypoint == null && !centeredOnLocation && currentLocation != null
+
+    // The viewport to (re)center on, or null to leave the map where the user left it.
+    // Priority: an explicitly selected waypoint, then a one-shot centering on the
+    // current location, then the installed map's center / Monaco fixture on first show.
+    val viewport: MapViewport? = when {
+        selectedWaypoint != null -> MapViewport(
+            center = selectedWaypoint.toFieldCoordinate(),
+            zoomLevel = installedViewport?.zoomLevel ?: DEFAULT_MAP_ZOOM,
+        )
+        centeringOnLocation -> MapViewport(
+            center = currentLocation!!,
+            zoomLevel = DEFAULT_MAP_ZOOM,
+        )
+        appliedViewportKey == null -> installedViewport
+            ?: MapViewport(center = MONACO_CENTER, zoomLevel = DEFAULT_MAP_ZOOM)
+        else -> null
+    }
 
     LaunchedEffect(context, activeInstalledMap?.id, activeInstalledMap?.filePath) {
         try {
@@ -419,10 +555,14 @@ private fun MapsforgeMapSurface(
                                             rotation: org.mapsforge.core.model.Rotation,
                                         ) = Unit
 
+                                        // Mapsforge passes null layerXY/tapXY for a map
+                                        // long-press (no associated layer position), so
+                                        // these must be nullable or Kotlin's non-null check
+                                        // throws before the body runs.
                                         override fun onLongPress(
                                             tapLatLong: LatLong,
-                                            layerXY: org.mapsforge.core.model.Point,
-                                            tapXY: org.mapsforge.core.model.Point,
+                                            layerXY: org.mapsforge.core.model.Point?,
+                                            tapXY: org.mapsforge.core.model.Point?,
                                         ): Boolean {
                                             currentOnMapLongPress(
                                                 FieldCoordinate(
@@ -434,8 +574,11 @@ private fun MapsforgeMapSurface(
                                         }
                                     },
                                 )
-                                moveTo(viewport)
-                                appliedViewportKey = viewport.key
+                                viewport?.let {
+                                    moveTo(it)
+                                    appliedViewportKey = it.key
+                                    if (centeringOnLocation) centeredOnLocation = true
+                                }
                                 // Fresh MapView (e.g. after switching map files): drop any
                                 // cached overlay state so the update pass re-adds layers here.
                                 breadcrumbOverlay.reset()
@@ -444,12 +587,15 @@ private fun MapsforgeMapSurface(
                             }
                         },
                         update = { mapView ->
-                            if (appliedViewportKey != viewport.key) {
+                            if (viewport != null && appliedViewportKey != viewport.key) {
                                 mapView.moveTo(viewport)
                                 appliedViewportKey = viewport.key
+                                if (centeringOnLocation) centeredOnLocation = true
                             }
                             breadcrumbOverlay.update(mapView, breadcrumbTrails, density)
-                            waypointOverlay.update(mapView, waypoints, selectedWaypointId, density)
+                            waypointOverlay.update(mapView, waypoints, selectedWaypointId, density) {
+                                currentOnWaypointTap(it)
+                            }
                             locationOverlay.update(mapView, currentLocation, headingDegrees, density)
                         },
                     )
@@ -1207,7 +1353,13 @@ private class WaypointOverlay {
     private val markers = mutableListOf<Marker>()
     private var appliedKey: String? = null
 
-    fun update(mapView: MapView, waypoints: List<Waypoint>, selectedId: String?, density: Float) {
+    fun update(
+        mapView: MapView,
+        waypoints: List<Waypoint>,
+        selectedId: String?,
+        density: Float,
+        onWaypointTap: (String) -> Unit,
+    ) {
         val key = overlayKey(waypoints, selectedId)
         if (key == appliedKey) return
 
@@ -1218,11 +1370,14 @@ private class WaypointOverlay {
         waypoints.forEach { waypoint ->
             val bitmap = AndroidBitmap(buildWaypointBitmap(density, waypoint.id == selectedId))
             // Anchor the pin tip (bottom-center of the bitmap) on the coordinate.
-            val marker = Marker(
-                LatLong(waypoint.latitude, waypoint.longitude),
-                bitmap,
-                0,
-                -bitmap.height / 2,
+            val marker = WaypointMarker(
+                latLong = LatLong(waypoint.latitude, waypoint.longitude),
+                bitmap = bitmap,
+                horizontalOffset = 0,
+                verticalOffset = -bitmap.height / 2,
+                mapView = mapView,
+                waypointId = waypoint.id,
+                onWaypointTap = onWaypointTap,
             )
             markers.add(marker)
             layers.add(marker)
@@ -1283,6 +1438,34 @@ private class BreadcrumbOverlay {
         trails.joinToString(";") {
             "${it.trail.id}:${it.points.size}:${it.trail.endedAtEpochMillis == null}"
         }
+}
+
+/**
+ * A waypoint pin [Marker] that reports taps landing on its bitmap up via [onWaypointTap].
+ * Mapsforge's base [Marker] ignores taps, so hit-testing is done here with [contains].
+ */
+private class WaypointMarker(
+    latLong: LatLong,
+    bitmap: org.mapsforge.core.graphics.Bitmap,
+    horizontalOffset: Int,
+    verticalOffset: Int,
+    private val mapView: MapView,
+    private val waypointId: String,
+    private val onWaypointTap: (String) -> Unit,
+) : Marker(latLong, bitmap, horizontalOffset, verticalOffset) {
+    override fun onTap(
+        tapLatLong: LatLong?,
+        layerXY: org.mapsforge.core.model.Point?,
+        tapXY: org.mapsforge.core.model.Point?,
+    ): Boolean {
+        if (layerXY == null || tapXY == null) return false
+        return if (contains(layerXY, tapXY, mapView)) {
+            onWaypointTap(waypointId)
+            true
+        } else {
+            false
+        }
+    }
 }
 
 /** Classic map pin: a filled circle head over a downward point, tip at bottom-center. */
