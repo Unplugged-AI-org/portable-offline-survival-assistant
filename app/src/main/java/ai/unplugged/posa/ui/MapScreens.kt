@@ -450,6 +450,10 @@ private fun MapsforgeMapSurface(
     var mapFile by remember { mutableStateOf<File?>(null) }
     var mapError by remember { mutableStateOf<String?>(null) }
     var appliedViewportKey by remember { mutableStateOf<String?>(null) }
+    // Re-armed each time this surface is (re)composed — i.e. every time the Map tab is
+    // re-entered — so returning to the map recenters on the current location once,
+    // without fighting the user's panning or re-centering on every GPS update.
+    var centeredOnLocation by remember { mutableStateOf(false) }
     val mapViewHolder = remember { mutableStateOf<MapView?>(null) }
     // Overlay z-order (bottom to top): breadcrumb trails, waypoint markers, then the
     // current-location marker. They are added in that order on first render.
@@ -457,10 +461,28 @@ private fun MapsforgeMapSurface(
     val waypointOverlay = remember { WaypointOverlay() }
     val locationOverlay = remember { LocationOverlay() }
     val selectedWaypoint = waypoints.firstOrNull { it.id == selectedWaypointId }
-    val viewport = activeInstalledMap?.viewport() ?: MapViewport(
-        center = selectedWaypoint?.toFieldCoordinate() ?: MONACO_CENTER,
-        zoomLevel = DEFAULT_MAP_ZOOM,
-    )
+    val installedViewport = activeInstalledMap?.viewport()
+
+    // Whether this recomposition should center on the current location: only when no
+    // waypoint is explicitly selected and we haven't already centered on location.
+    val centeringOnLocation = selectedWaypoint == null && !centeredOnLocation && currentLocation != null
+
+    // The viewport to (re)center on, or null to leave the map where the user left it.
+    // Priority: an explicitly selected waypoint, then a one-shot centering on the
+    // current location, then the installed map's center / Monaco fixture on first show.
+    val viewport: MapViewport? = when {
+        selectedWaypoint != null -> MapViewport(
+            center = selectedWaypoint.toFieldCoordinate(),
+            zoomLevel = installedViewport?.zoomLevel ?: DEFAULT_MAP_ZOOM,
+        )
+        centeringOnLocation -> MapViewport(
+            center = currentLocation!!,
+            zoomLevel = DEFAULT_MAP_ZOOM,
+        )
+        appliedViewportKey == null -> installedViewport
+            ?: MapViewport(center = MONACO_CENTER, zoomLevel = DEFAULT_MAP_ZOOM)
+        else -> null
+    }
 
     LaunchedEffect(context, activeInstalledMap?.id, activeInstalledMap?.filePath) {
         try {
@@ -552,8 +574,11 @@ private fun MapsforgeMapSurface(
                                         }
                                     },
                                 )
-                                moveTo(viewport)
-                                appliedViewportKey = viewport.key
+                                viewport?.let {
+                                    moveTo(it)
+                                    appliedViewportKey = it.key
+                                    if (centeringOnLocation) centeredOnLocation = true
+                                }
                                 // Fresh MapView (e.g. after switching map files): drop any
                                 // cached overlay state so the update pass re-adds layers here.
                                 breadcrumbOverlay.reset()
@@ -562,9 +587,10 @@ private fun MapsforgeMapSurface(
                             }
                         },
                         update = { mapView ->
-                            if (appliedViewportKey != viewport.key) {
+                            if (viewport != null && appliedViewportKey != viewport.key) {
                                 mapView.moveTo(viewport)
                                 appliedViewportKey = viewport.key
+                                if (centeringOnLocation) centeredOnLocation = true
                             }
                             breadcrumbOverlay.update(mapView, breadcrumbTrails, density)
                             waypointOverlay.update(mapView, waypoints, selectedWaypointId, density) {
