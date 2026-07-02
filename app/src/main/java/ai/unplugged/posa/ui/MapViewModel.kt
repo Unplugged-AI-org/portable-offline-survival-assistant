@@ -179,6 +179,18 @@ internal class MapViewModel(
         }
     }
 
+    fun updateWaypoint(waypoint: Waypoint, name: String, notes: String?) {
+        mutate { localDatabase ->
+            localDatabase.repositories().waypoints.save(
+                waypoint.copy(
+                    name = name,
+                    notes = notes,
+                    updatedAtEpochMillis = System.currentTimeMillis(),
+                ),
+            )
+        }
+    }
+
     fun deleteWaypoint(waypoint: Waypoint) {
         mutate { localDatabase ->
             localDatabase.repositories().waypoints.delete(waypoint.id)
