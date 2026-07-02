@@ -161,7 +161,7 @@ internal class MapViewModel(
         }
     }
 
-    fun saveCurrentWaypoint(name: String, notes: String?, coordinate: FieldCoordinate) {
+    fun saveWaypoint(name: String, notes: String?, coordinate: FieldCoordinate) {
         mutate { localDatabase ->
             val now = System.currentTimeMillis()
             localDatabase.repositories().waypoints.save(
