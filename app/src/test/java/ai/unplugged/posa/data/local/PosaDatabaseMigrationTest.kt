@@ -1,14 +1,18 @@
 package ai.unplugged.posa.data.local
 
 import ai.unplugged.posa.data.local.repository.repositories
+import ai.unplugged.posa.data.model.GearItem
 import ai.unplugged.posa.data.model.GuideCard
 import ai.unplugged.posa.data.model.InstalledMap
 import ai.unplugged.posa.data.model.Pack
 import ai.unplugged.posa.data.model.Provenance
 import ai.unplugged.posa.data.model.Waypoint
+import ai.unplugged.posa.data.local.entity.RetrievalChunkEntity
+import ai.unplugged.posa.data.local.entity.RetrievalDocumentEntity
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import androidx.room.Room
+import androidx.sqlite.db.SimpleSQLiteQuery
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -36,7 +40,7 @@ class PosaDatabaseMigrationTest {
     }
 
     @Test
-    fun migrationFromOneToFourPreservesExistingDataAndAddsNewColumns() = runTest {
+    fun migrationFromOneToTenPreservesExistingDataAndAddsNewColumns() = runTest {
         createVersionOneDatabase()
 
         val database = Room.databaseBuilder(
@@ -47,11 +51,18 @@ class PosaDatabaseMigrationTest {
             PosaDatabase.MIGRATION_1_2,
             PosaDatabase.MIGRATION_2_3,
             PosaDatabase.MIGRATION_3_4,
+            PosaDatabase.MIGRATION_4_5,
+            PosaDatabase.MIGRATION_5_6,
+            PosaDatabase.MIGRATION_6_7,
+            PosaDatabase.MIGRATION_7_8,
+            PosaDatabase.MIGRATION_8_9,
+            PosaDatabase.MIGRATION_9_10,
         ).build()
 
         try {
             val repositories = database.repositories()
             assertEquals(LEGACY_WAYPOINT, repositories.waypoints.get(LEGACY_WAYPOINT.id))
+            assertEquals(LEGACY_GEAR, repositories.gear.get(LEGACY_GEAR.id))
 
             val installedMap = InstalledMap(
                 id = "map-area-test",
@@ -73,6 +84,19 @@ class PosaDatabaseMigrationTest {
             repositories.installedMaps.save(installedMap)
 
             assertEquals(listOf(installedMap), repositories.installedMaps.listEnabled())
+            val legacyIndexTables = database.openHelper.readableDatabase.query(
+                """
+                SELECT name FROM sqlite_master
+                WHERE type = 'table'
+                    AND name IN ('map_features', 'map_feature_segments', 'map_index_tiles')
+                ORDER BY name
+                """.trimIndent(),
+            ).use { cursor ->
+                buildList {
+                    while (cursor.moveToNext()) add(cursor.getString(0))
+                }
+            }
+            assertEquals(emptyList<String>(), legacyIndexTables)
 
             val pack = Pack(
                 id = "pack",
@@ -121,6 +145,80 @@ class PosaDatabaseMigrationTest {
             repositories.guideCards.save(guideCard)
 
             assertEquals(guideCard, repositories.guideCards.get(guideCard.id))
+
+            val embeddingModel = database.retrievalDao()
+                .getEmbeddingModel(PosaDatabase.DEFAULT_EMBEDDING_MODEL_ID)
+            assertEquals(PosaDatabase.DEFAULT_EMBEDDING_DIMENSION, embeddingModel?.dimension)
+            assertEquals(PosaDatabase.DEFAULT_EMBEDDING_VECTOR_FORMAT, embeddingModel?.vectorFormat)
+
+            val retrievalDocument = RetrievalDocumentEntity(
+                id = "doc-water",
+                title = "Emergency Water",
+                documentType = "pdf",
+                publisher = "CDC",
+                category = "water",
+                hazardTags = "contamination|outage",
+                audienceTags = "household|camping",
+                urgency = "emergency",
+                sourceUrl = "https://example.test/water.pdf",
+                sourceCitation = "Emergency Water, p. 1",
+                license = "public-domain",
+                contentHash = "document-hash",
+                corpusVersion = "test-corpus",
+                createdAtEpochMillis = NOW,
+                updatedAtEpochMillis = NOW,
+            )
+            val retrievalChunk = RetrievalChunkEntity(
+                id = "chunk-water-1",
+                documentId = retrievalDocument.id,
+                chunkOrdinal = 0,
+                sourcePageStart = 1,
+                sourcePageEnd = 1,
+                sectionTitle = "Disinfect water",
+                headingPath = "Emergency Water > Disinfect water",
+                content = "Boil water before using it when official sources say it is unsafe.",
+                tokenCount = 12,
+                category = "water",
+                hazardTags = "contamination|outage",
+                audienceTags = "household|camping",
+                urgency = "emergency",
+                embeddingModelId = PosaDatabase.DEFAULT_EMBEDDING_MODEL_ID,
+                embeddingDimension = PosaDatabase.DEFAULT_EMBEDDING_DIMENSION,
+                embeddingVersion = "bge-small-en-v1.5:test",
+                embeddedAtEpochMillis = NOW,
+                contentHash = "chunk-hash",
+                createdAtEpochMillis = NOW,
+                updatedAtEpochMillis = NOW,
+            )
+            database.retrievalDao().upsertDocument(retrievalDocument)
+            database.retrievalDao().upsertChunk(retrievalChunk)
+
+            val matches = database.retrievalDao().searchChunks(
+                SimpleSQLiteQuery(
+                    """
+                    SELECT
+                        c.id AS chunk_id,
+                        c.document_id AS document_id,
+                        d.title AS title,
+                        c.section_title AS section_title,
+                        c.category AS category,
+                        c.hazard_tags AS hazard_tags,
+                        c.audience_tags AS audience_tags,
+                        c.urgency AS urgency,
+                        d.source_url AS source_url,
+                        d.source_citation AS source_citation,
+                        c.content AS content,
+                        0.0 AS rank
+                    FROM retrieval_chunks_fts
+                    JOIN retrieval_chunks c ON retrieval_chunks_fts.rowid = c.rowid
+                    JOIN retrieval_documents d ON c.document_id = d.id
+                    WHERE retrieval_chunks_fts MATCH ?
+                    ORDER BY c.chunk_ordinal
+                    """.trimIndent(),
+                    arrayOf("boil"),
+                ),
+            )
+            assertEquals(listOf(retrievalChunk.id), matches.map { it.chunkId })
         } finally {
             database.close()
         }
@@ -149,6 +247,25 @@ class PosaDatabaseMigrationTest {
                         LEGACY_WAYPOINT.notes,
                         LEGACY_WAYPOINT.createdAtEpochMillis,
                         LEGACY_WAYPOINT.updatedAtEpochMillis,
+                    ),
+                )
+                database.execSQL(
+                    """
+                    INSERT INTO gear_items (
+                        id, name, category, quantity, condition, notes,
+                        is_available, created_at_epoch_millis, updated_at_epoch_millis
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """.trimIndent(),
+                    arrayOf<Any?>(
+                        LEGACY_GEAR.id,
+                        LEGACY_GEAR.name,
+                        LEGACY_GEAR.category,
+                        LEGACY_GEAR.quantity,
+                        LEGACY_GEAR.condition,
+                        LEGACY_GEAR.notes,
+                        LEGACY_GEAR.isAvailable,
+                        LEGACY_GEAR.createdAtEpochMillis,
+                        LEGACY_GEAR.updatedAtEpochMillis,
                     ),
                 )
                 database.version = 1
@@ -419,6 +536,20 @@ class PosaDatabaseMigrationTest {
             notes = "Created before installed maps existed.",
             createdAtEpochMillis = NOW,
             updatedAtEpochMillis = NOW,
+        )
+
+        val LEGACY_GEAR = GearItem(
+            id = "legacy-gear",
+            name = "Headlamp",
+            category = "lighting",
+            quantity = 1,
+            condition = "working",
+            notes = "Legacy gear item.",
+            isAvailable = true,
+            createdAtEpochMillis = NOW,
+            updatedAtEpochMillis = NOW,
+            weightKilograms = null,
+            volumeLiters = null,
         )
     }
 }

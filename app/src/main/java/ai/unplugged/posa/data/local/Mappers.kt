@@ -117,6 +117,10 @@ internal fun InstalledMap.toEntity(): InstalledMapEntity = InstalledMapEntity(
     boundingBoxMaxLongitude = boundingBoxMaxLongitude,
     importedAtEpochMillis = importedAtEpochMillis,
     updatedAtEpochMillis = updatedAtEpochMillis,
+    legacyIndexingStatus = "disabled",
+    legacyIndexedFeatureCount = 0,
+    legacyIndexedSegmentCount = 0,
+    legacyIndexError = null,
 )
 
 internal fun FieldNoteEntity.toModel(): FieldNote = FieldNote(
@@ -173,6 +177,7 @@ internal fun ChecklistItemEntity.toModel(): ChecklistItem = ChecklistItem(
     position = position,
     isChecked = isChecked,
     updatedAtEpochMillis = updatedAtEpochMillis,
+    gearItemId = gearItemId,
 )
 
 internal fun ChecklistItem.toEntity(): ChecklistItemEntity = ChecklistItemEntity(
@@ -183,6 +188,7 @@ internal fun ChecklistItem.toEntity(): ChecklistItemEntity = ChecklistItemEntity
     position = position,
     isChecked = isChecked,
     updatedAtEpochMillis = updatedAtEpochMillis,
+    gearItemId = gearItemId,
 )
 
 internal fun GearItemEntity.toModel(): GearItem = GearItem(
@@ -190,6 +196,8 @@ internal fun GearItemEntity.toModel(): GearItem = GearItem(
     name = name,
     category = category,
     quantity = quantity,
+    weightKilograms = weightKilograms,
+    volumeLiters = volumeLiters,
     condition = condition,
     notes = notes,
     isAvailable = isAvailable,
@@ -202,6 +210,8 @@ internal fun GearItem.toEntity(): GearItemEntity = GearItemEntity(
     name = name,
     category = category,
     quantity = quantity,
+    weightKilograms = weightKilograms,
+    volumeLiters = volumeLiters,
     condition = condition,
     notes = notes,
     isAvailable = isAvailable,

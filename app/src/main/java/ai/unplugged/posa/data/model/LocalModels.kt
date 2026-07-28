@@ -79,6 +79,7 @@ data class ChecklistItem(
     val position: Int,
     val isChecked: Boolean,
     val updatedAtEpochMillis: Long,
+    val gearItemId: String? = null,
 )
 
 data class GearItem(
@@ -91,6 +92,8 @@ data class GearItem(
     val isAvailable: Boolean,
     val createdAtEpochMillis: Long,
     val updatedAtEpochMillis: Long,
+    val weightKilograms: Double? = null,
+    val volumeLiters: Double? = null,
 )
 
 data class Pack(

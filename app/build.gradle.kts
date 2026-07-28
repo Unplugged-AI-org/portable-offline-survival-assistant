@@ -13,7 +13,7 @@ android {
 
     defaultConfig {
         applicationId = "ai.unplugged.posa"
-        minSdk = 26
+        minSdk = 31
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
@@ -74,6 +74,8 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.room:room-ktx:2.8.4")
     implementation("androidx.room:room-runtime:2.8.4")
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.27.0")
+    implementation("ai.liquid.leap:leap-sdk:0.10.9")
     implementation("org.mapsforge:mapsforge-map-android:0.25.0")
     implementation("org.mapsforge:mapsforge-map-reader:0.25.0")
     implementation("org.mapsforge:mapsforge-themes:0.25.0")
@@ -87,4 +89,9 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
     testImplementation("org.robolectric:robolectric:4.15.1")
+
+    androidTestImplementation("androidx.test:core:1.7.0")
+    androidTestImplementation("androidx.test:runner:1.7.0")
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
+    androidTestImplementation("junit:junit:4.13.2")
 }

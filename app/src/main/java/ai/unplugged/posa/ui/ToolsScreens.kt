@@ -61,6 +61,8 @@ internal data class GearItemDraft(
     val name: String,
     val category: String?,
     val quantity: Int,
+    val weightKilograms: Double?,
+    val volumeLiters: Double?,
     val condition: String?,
     val notes: String?,
     val isAvailable: Boolean,
@@ -81,8 +83,8 @@ internal data class ToolsActions(
     val onCreateChecklist: (title: String, description: String?) -> Unit,
     val onUpdateChecklist: (checklist: Checklist, title: String, description: String?, isArchived: Boolean) -> Unit,
     val onDeleteChecklist: (checklist: Checklist) -> Unit,
-    val onCreateChecklistItem: (checklistId: String, label: String, details: String?) -> Unit,
-    val onUpdateChecklistItem: (item: ChecklistItem, label: String, details: String?, isChecked: Boolean) -> Unit,
+    val onCreateChecklistItem: (checklistId: String, label: String, details: String?, gearItemId: String?) -> Unit,
+    val onUpdateChecklistItem: (item: ChecklistItem, label: String, details: String?, isChecked: Boolean, gearItemId: String?) -> Unit,
     val onDeleteChecklistItem: (item: ChecklistItem) -> Unit,
     val onCreateGearItem: (draft: GearItemDraft) -> Unit,
     val onUpdateGearItem: (item: GearItem, draft: GearItemDraft) -> Unit,
@@ -144,8 +146,8 @@ private fun ChecklistsTab(
     onCreateChecklist: (title: String, description: String?) -> Unit,
     onUpdateChecklist: (checklist: Checklist, title: String, description: String?, isArchived: Boolean) -> Unit,
     onDeleteChecklist: (checklist: Checklist) -> Unit,
-    onCreateChecklistItem: (checklistId: String, label: String, details: String?) -> Unit,
-    onUpdateChecklistItem: (item: ChecklistItem, label: String, details: String?, isChecked: Boolean) -> Unit,
+    onCreateChecklistItem: (checklistId: String, label: String, details: String?, gearItemId: String?) -> Unit,
+    onUpdateChecklistItem: (item: ChecklistItem, label: String, details: String?, isChecked: Boolean, gearItemId: String?) -> Unit,
     onDeleteChecklistItem: (item: ChecklistItem) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -156,6 +158,7 @@ private fun ChecklistsTab(
         state.checklists.forEach { checklistWithItems ->
             ChecklistPanel(
                 checklistWithItems = checklistWithItems,
+                gear = state.gear,
                 onUpdateChecklist = onUpdateChecklist,
                 onDeleteChecklist = onDeleteChecklist,
                 onCreateChecklistItem = onCreateChecklistItem,
@@ -242,15 +245,18 @@ private fun NewChecklistForm(
 @Composable
 private fun ChecklistPanel(
     checklistWithItems: ChecklistWithItems,
+    gear: List<GearItem>,
     onUpdateChecklist: (checklist: Checklist, title: String, description: String?, isArchived: Boolean) -> Unit,
     onDeleteChecklist: (checklist: Checklist) -> Unit,
-    onCreateChecklistItem: (checklistId: String, label: String, details: String?) -> Unit,
-    onUpdateChecklistItem: (item: ChecklistItem, label: String, details: String?, isChecked: Boolean) -> Unit,
+    onCreateChecklistItem: (checklistId: String, label: String, details: String?, gearItemId: String?) -> Unit,
+    onUpdateChecklistItem: (item: ChecklistItem, label: String, details: String?, isChecked: Boolean, gearItemId: String?) -> Unit,
     onDeleteChecklistItem: (item: ChecklistItem) -> Unit,
 ) {
     val checklist = checklistWithItems.checklist
     val items = checklistWithItems.items
     val completed = items.count { it.isChecked }
+    val loadSummary = checklistLoadSummary(items, gear)
+    val gearOptions = gear.map { SelectionOption(it.id, it.name) }
     var expanded by rememberSaveable(checklist.id) { mutableStateOf(false) }
     var title by rememberSaveable(checklist.id, checklist.updatedAtEpochMillis) {
         mutableStateOf(checklist.title)
@@ -263,6 +269,7 @@ private fun ChecklistPanel(
     }
     var newItemLabel by rememberSaveable(checklist.id) { mutableStateOf("") }
     var newItemDetails by rememberSaveable(checklist.id) { mutableStateOf("") }
+    var newItemGearId by rememberSaveable(checklist.id) { mutableStateOf<String?>(null) }
 
     PanelSurface {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -270,6 +277,7 @@ private fun ChecklistPanel(
                 title = checklist.title,
                 completed = completed,
                 total = items.size,
+                loadSummary = loadSummary,
                 isArchived = checklist.isArchived,
                 expanded = expanded,
                 onToggle = { expanded = !expanded },
@@ -341,6 +349,8 @@ private fun ChecklistPanel(
             items.forEach { item ->
                 ChecklistItemRow(
                     item = item,
+                    gear = gear,
+                    gearOptions = gearOptions,
                     onUpdateChecklistItem = onUpdateChecklistItem,
                     onDeleteChecklistItem = onDeleteChecklistItem,
                 )
@@ -375,9 +385,11 @@ private fun ChecklistPanel(
                             checklist.id,
                             newItemLabel.trim(),
                             newItemDetails.trim().blankToNull(),
+                            newItemGearId,
                         )
                         newItemLabel = ""
                         newItemDetails = ""
+                        newItemGearId = null
                     },
                     enabled = newItemLabel.isNotBlank(),
                 ) {
@@ -387,6 +399,12 @@ private fun ChecklistPanel(
                     )
                 }
             }
+            LinkSelector(
+                label = "Gear link",
+                selectedId = newItemGearId,
+                options = gearOptions,
+                onSelect = { newItemGearId = it },
+            )
         }
     }
 }
@@ -396,6 +414,7 @@ private fun ChecklistHeader(
     title: String,
     completed: Int,
     total: Int,
+    loadSummary: String?,
     isArchived: Boolean,
     expanded: Boolean,
     onToggle: () -> Unit,
@@ -425,6 +444,10 @@ private fun ChecklistHeader(
                 Text(
                     text = buildString {
                         append("$completed/$total complete")
+                        loadSummary?.let {
+                            append(" · ")
+                            append(it)
+                        }
                         if (isArchived) append(" · Archived")
                     },
                     style = MaterialTheme.typography.labelMedium,
@@ -448,14 +471,19 @@ private fun ChecklistHeader(
 @Composable
 private fun ChecklistItemRow(
     item: ChecklistItem,
-    onUpdateChecklistItem: (item: ChecklistItem, label: String, details: String?, isChecked: Boolean) -> Unit,
+    gear: List<GearItem>,
+    gearOptions: List<SelectionOption>,
+    onUpdateChecklistItem: (item: ChecklistItem, label: String, details: String?, isChecked: Boolean, gearItemId: String?) -> Unit,
     onDeleteChecklistItem: (item: ChecklistItem) -> Unit,
 ) {
     var expanded by rememberSaveable(item.id) { mutableStateOf(false) }
     var label by rememberSaveable(item.id, item.updatedAtEpochMillis) { mutableStateOf(item.label) }
     var details by rememberSaveable(item.id, item.updatedAtEpochMillis) { mutableStateOf(item.details.orEmpty()) }
     var isChecked by rememberSaveable(item.id, item.updatedAtEpochMillis) { mutableStateOf(item.isChecked) }
-    val hasDetails = !item.details.isNullOrBlank()
+    var gearItemId by rememberSaveable(item.id, item.updatedAtEpochMillis) { mutableStateOf(item.gearItemId) }
+    val linkedGear = gear.firstOrNull { it.id == item.gearItemId }
+    val selectedLinkedGear = gear.firstOrNull { it.id == gearItemId }
+    val hasDetails = !item.details.isNullOrBlank() || linkedGear != null
 
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -469,7 +497,7 @@ private fun ChecklistItemRow(
                 checked = isChecked,
                 onCheckedChange = { checked ->
                     isChecked = checked
-                    onUpdateChecklistItem(item, label.trim(), details.trim().blankToNull(), checked)
+                    onUpdateChecklistItem(item, label.trim(), details.trim().blankToNull(), checked, gearItemId)
                 },
             )
             Text(
@@ -520,10 +548,23 @@ private fun ChecklistItemRow(
                     minLines = 1,
                     label = { Text("Details") },
                 )
+                LinkSelector(
+                    label = "Gear link",
+                    selectedId = gearItemId,
+                    options = gearOptions,
+                    onSelect = { gearItemId = it },
+                )
+                selectedLinkedGear?.checklistGearSummary()?.let { summary ->
+                    Text(
+                        text = summary,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.secondary,
+                    )
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     OutlinedButton(
                         onClick = {
-                            onUpdateChecklistItem(item, label.trim(), details.trim().blankToNull(), isChecked)
+                            onUpdateChecklistItem(item, label.trim(), details.trim().blankToNull(), isChecked, gearItemId)
                         },
                         enabled = label.isNotBlank(),
                     ) {
@@ -615,7 +656,10 @@ private fun GearItemCard(
     onDeleteGearItem: (item: GearItem) -> Unit,
 ) {
     var expanded by rememberSaveable(item.id) { mutableStateOf(false) }
-    val hasMore = !item.condition.isNullOrBlank() || !item.notes.isNullOrBlank()
+    val hasMore = !item.condition.isNullOrBlank() ||
+        !item.notes.isNullOrBlank() ||
+        item.weightKilograms != null ||
+        item.volumeLiters != null
 
     PanelSurface {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -673,12 +717,48 @@ private fun GearItemCard(
 private fun GearItem.gearSummary(): String = buildString {
     append("Qty ")
     append(quantity)
+    val metrics = gearMetricSummary()
+    if (metrics.isNotBlank()) {
+        append(" · ")
+        append(metrics)
+    }
     category?.takeIf { it.isNotBlank() }?.let {
         append(" · ")
         append(it)
     }
     append(if (isAvailable) " · Have" else " · Missing")
 }
+
+private fun GearItem.gearMetricSummary(): String = buildList {
+    weightKilograms?.let { add("${formatKilograms(it)} each / ${formatKilograms(it * quantity.coerceAtLeast(0))} total") }
+    volumeLiters?.let { add("${formatLiters(it)} each / ${formatLiters(it * quantity.coerceAtLeast(0))} total") }
+}.joinToString(" · ")
+
+private fun checklistLoadSummary(items: List<ChecklistItem>, gear: List<GearItem>): String? {
+    val gearById = gear.associateBy { it.id }
+    val linkedGear = items.mapNotNull { item -> item.gearItemId?.let(gearById::get) }
+    if (linkedGear.isEmpty()) return null
+
+    val totalWeightKilograms = linkedGear.sumOf { item ->
+        (item.weightKilograms ?: 0.0) * item.quantity.coerceAtLeast(0)
+    }
+    val totalVolumeLiters = linkedGear.sumOf { item ->
+        (item.volumeLiters ?: 0.0) * item.quantity.coerceAtLeast(0)
+    }
+    val hasWeight = linkedGear.any { it.weightKilograms != null }
+    val hasVolume = linkedGear.any { it.volumeLiters != null }
+    return buildList {
+        add("${linkedGear.size} linked")
+        if (hasWeight) add(formatKilograms(totalWeightKilograms))
+        if (hasVolume) add(formatLiters(totalVolumeLiters))
+    }.joinToString(" · ")
+}
+
+private fun GearItem.checklistGearSummary(): String = buildList {
+    add("Linked gear")
+    weightKilograms?.let { add("${formatKilograms(it * quantity.coerceAtLeast(0))} total") }
+    volumeLiters?.let { add("${formatLiters(it * quantity.coerceAtLeast(0))} total") }
+}.joinToString(" · ")
 
 @Composable
 private fun GearItemForm(
@@ -694,6 +774,12 @@ private fun GearItemForm(
     var quantity by rememberSaveable(resetKey, resetVersion) {
         mutableStateOf(initialItem?.quantity?.toString() ?: "1")
     }
+    var weightKilograms by rememberSaveable(resetKey, resetVersion) {
+        mutableStateOf(initialItem?.weightKilograms?.toInputNumber().orEmpty())
+    }
+    var volumeLiters by rememberSaveable(resetKey, resetVersion) {
+        mutableStateOf(initialItem?.volumeLiters?.toInputNumber().orEmpty())
+    }
     var condition by rememberSaveable(resetKey, resetVersion) { mutableStateOf(initialItem?.condition.orEmpty()) }
     var notes by rememberSaveable(resetKey, resetVersion) { mutableStateOf(initialItem?.notes.orEmpty()) }
     var isAvailable by rememberSaveable(resetKey, resetVersion) {
@@ -705,6 +791,8 @@ private fun GearItemForm(
         name = ""
         category = ""
         quantity = "1"
+        weightKilograms = ""
+        volumeLiters = ""
         condition = ""
         notes = ""
         isAvailable = true
@@ -750,6 +838,24 @@ private fun GearItemForm(
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             )
         }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                value = weightKilograms,
+                onValueChange = { weightKilograms = it },
+                modifier = Modifier.weight(1f),
+                singleLine = true,
+                label = { Text("Weight kg") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            )
+            OutlinedTextField(
+                value = volumeLiters,
+                onValueChange = { volumeLiters = it },
+                modifier = Modifier.weight(1f),
+                singleLine = true,
+                label = { Text("Volume L") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            )
+        }
         OutlinedTextField(
             value = condition,
             onValueChange = { condition = it },
@@ -769,10 +875,16 @@ private fun GearItemForm(
             Button(
                 onClick = {
                     val parsedQuantity = quantity.trim().toIntOrNull()
+                    val parsedWeightKilograms = weightKilograms.parseOptionalPositiveDouble()
+                    val parsedVolumeLiters = volumeLiters.parseOptionalPositiveDouble()
                     if (name.isBlank()) {
                         formError = "Name is required."
                     } else if (parsedQuantity == null || parsedQuantity < 0) {
                         formError = "Quantity must be zero or greater."
+                    } else if (parsedWeightKilograms == null && weightKilograms.isNotBlank()) {
+                        formError = "Weight must be blank or zero or greater."
+                    } else if (parsedVolumeLiters == null && volumeLiters.isNotBlank()) {
+                        formError = "Volume must be blank or zero or greater."
                     } else {
                         formError = null
                         onSubmit(
@@ -780,6 +892,8 @@ private fun GearItemForm(
                                 name = name.trim(),
                                 category = category.trim().blankToNull(),
                                 quantity = parsedQuantity,
+                                weightKilograms = parsedWeightKilograms,
+                                volumeLiters = parsedVolumeLiters,
                                 condition = condition.trim().blankToNull(),
                                 notes = notes.trim().blankToNull(),
                                 isAvailable = isAvailable,
@@ -1326,6 +1440,29 @@ private fun FieldNote.linkLabels(state: ToolsContentState): List<String> {
 }
 
 private fun Double.toCoordinateLabel(): String = String.format(Locale.US, "%.5f", this)
+
+private fun Double.toInputNumber(): String =
+    String.format(Locale.US, "%.3f", this).trimEnd('0').trimEnd('.')
+
+private fun String.parseOptionalPositiveDouble(): Double? {
+    val trimmed = trim()
+    if (trimmed.isBlank()) return null
+    val parsed = trimmed.toDoubleOrNull() ?: return null
+    return parsed.takeIf { it >= 0.0 }
+}
+
+private fun formatKilograms(value: Double): String =
+    "${formatLoadNumber(value)} kg"
+
+private fun formatLiters(value: Double): String =
+    "${formatLoadNumber(value)} L"
+
+private fun formatLoadNumber(value: Double): String =
+    when {
+        value >= 100.0 -> String.format(Locale.US, "%.0f", value)
+        value >= 10.0 -> String.format(Locale.US, "%.1f", value)
+        else -> String.format(Locale.US, "%.2f", value)
+    }.trimEnd('0').trimEnd('.')
 
 private fun Long.toDateTimeLabel(): String =
     Instant.ofEpochMilli(this)

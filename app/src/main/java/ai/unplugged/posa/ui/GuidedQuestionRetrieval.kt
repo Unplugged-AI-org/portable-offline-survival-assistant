@@ -72,7 +72,8 @@ internal fun answerGuidedQuestion(
         .take(MAX_CONTEXT_FACTS)
         .map { gear ->
             val status = if (gear.isAvailable) "Have" else "Missing"
-            "$status: ${gear.name} x${gear.quantity}"
+            val metrics = gear.contextMetricSummary()
+            "$status: ${gear.name} x${gear.quantity}${metrics?.let { " ($it)" }.orEmpty()}"
         }
 
     val mapFacts = if (question.needsMapContext() || matches.any { it.item.card.needsMapContext() }) {
@@ -174,6 +175,18 @@ private fun GuideCard.contextTerms(): List<String> =
 private fun GearItem.matchesAny(terms: List<String>): Boolean =
     toQueryTerms(name, category.orEmpty(), condition.orEmpty(), notes.orEmpty())
         .any { it in terms }
+
+private fun GearItem.contextMetricSummary(): String? = buildList {
+    weightKilograms?.let { add("${formatContextNumber(it * quantity.coerceAtLeast(0))} kg") }
+    volumeLiters?.let { add("${formatContextNumber(it * quantity.coerceAtLeast(0))} L") }
+}.takeIf { it.isNotEmpty() }?.joinToString(", ")
+
+private fun formatContextNumber(value: Double): String =
+    when {
+        value >= 100.0 -> String.format(Locale.US, "%.0f", value)
+        value >= 10.0 -> String.format(Locale.US, "%.1f", value)
+        else -> String.format(Locale.US, "%.2f", value)
+    }.trimEnd('0').trimEnd('.')
 
 private fun InstalledMap.boundsLabel(): String? {
     val minLatitude = boundingBoxMinLatitude ?: return null

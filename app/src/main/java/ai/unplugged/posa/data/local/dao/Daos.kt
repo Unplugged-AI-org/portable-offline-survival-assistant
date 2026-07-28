@@ -10,10 +10,16 @@ import ai.unplugged.posa.data.local.entity.GuideCardEntity
 import ai.unplugged.posa.data.local.entity.InstalledMapEntity
 import ai.unplugged.posa.data.local.entity.PackEntity
 import ai.unplugged.posa.data.local.entity.ProvenanceEntity
+import ai.unplugged.posa.data.local.entity.RetrievalChunkEntity
+import ai.unplugged.posa.data.local.entity.RetrievalDocumentEntity
+import ai.unplugged.posa.data.local.entity.RetrievalEmbeddingModelEntity
 import ai.unplugged.posa.data.local.entity.WaypointEntity
+import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Query
+import androidx.room.RawQuery
 import androidx.room.Upsert
+import androidx.sqlite.db.SupportSQLiteQuery
 
 @Dao
 interface WaypointDao {
@@ -208,4 +214,58 @@ interface ProvenanceDao {
 
     @Query("DELETE FROM provenance WHERE id = :id")
     suspend fun delete(id: String)
+}
+
+data class RetrievalChunkFtsMatch(
+    @ColumnInfo(name = "chunk_id") val chunkId: String,
+    @ColumnInfo(name = "document_id") val documentId: String,
+    val title: String,
+    @ColumnInfo(name = "section_title") val sectionTitle: String?,
+    val category: String,
+    @ColumnInfo(name = "hazard_tags") val hazardTags: String?,
+    @ColumnInfo(name = "audience_tags") val audienceTags: String?,
+    val urgency: String?,
+    @ColumnInfo(name = "source_url") val sourceUrl: String?,
+    @ColumnInfo(name = "source_citation") val sourceCitation: String?,
+    val content: String,
+    val rank: Double,
+)
+
+@Dao
+interface RetrievalDao {
+    @Upsert
+    suspend fun upsertEmbeddingModel(model: RetrievalEmbeddingModelEntity)
+
+    @Query("SELECT * FROM retrieval_embedding_models WHERE model_id = :modelId")
+    suspend fun getEmbeddingModel(modelId: String): RetrievalEmbeddingModelEntity?
+
+    @Query("SELECT * FROM retrieval_embedding_models WHERE is_active = 1 ORDER BY created_at_epoch_millis DESC")
+    suspend fun listActiveEmbeddingModels(): List<RetrievalEmbeddingModelEntity>
+
+    @Upsert
+    suspend fun upsertDocument(document: RetrievalDocumentEntity)
+
+    @Query("SELECT * FROM retrieval_documents WHERE id = :id")
+    suspend fun getDocument(id: String): RetrievalDocumentEntity?
+
+    @Query("SELECT * FROM retrieval_documents ORDER BY category COLLATE NOCASE, title COLLATE NOCASE")
+    suspend fun listDocuments(): List<RetrievalDocumentEntity>
+
+    @Upsert
+    suspend fun upsertChunk(chunk: RetrievalChunkEntity)
+
+    @Query("SELECT * FROM retrieval_chunks WHERE id = :id")
+    suspend fun getChunk(id: String): RetrievalChunkEntity?
+
+    @Query(
+        """
+        SELECT * FROM retrieval_chunks
+        WHERE document_id = :documentId
+        ORDER BY chunk_ordinal ASC
+        """,
+    )
+    suspend fun listChunksForDocument(documentId: String): List<RetrievalChunkEntity>
+
+    @RawQuery(observedEntities = [RetrievalChunkEntity::class])
+    suspend fun searchChunks(query: SupportSQLiteQuery): List<RetrievalChunkFtsMatch>
 }

@@ -18,6 +18,17 @@ enum class PosaDestination(
             "Treat map data as field context, not survival-critical truth.",
         ),
     ),
+    Ask(
+        label = "Ask",
+        headline = "Source Q&A",
+        summary = "Search the bundled source corpus with local keyword and embedding retrieval.",
+        offlineState = "Questions search the local RAG database and bundled query embedding model on-device; results are source excerpts, citations, and retrieval metadata.",
+        nextSteps = listOf(
+            "Add answer generation only after verifier and repair checks are wired.",
+            "Keep source citations visible for every retrieved excerpt.",
+            "Use keyword fallback whenever local embeddings are unavailable.",
+        ),
+    ),
     Tools(
         label = "Tools",
         headline = "Field tools",
@@ -27,28 +38,6 @@ enum class PosaDestination(
             "Use checklists for planning and gear status before later guided workflows read this context.",
             "Link notes to saved map waypoints when location context matters.",
             "Keep notes, checklist edits, and inventory changes local by default.",
-        ),
-    ),
-    Guide(
-        label = "Guide",
-        headline = "Source-grounded guide",
-        summary = "Ask installed packs or run non-AI workflows for water, navigation, shelter, fire, signaling, and battery conservation.",
-        offlineState = "Questions and workflows use installed guide cards, local checklists, gear inventory, and saved map context; no generated survival or medical advice is included.",
-        nextSteps = listOf(
-            "Replace draft cards with reviewed release-ready content.",
-            "Expand pack validation before user imports are supported.",
-            "Return only installed-source-backed guidance.",
-        ),
-    ),
-    Packs(
-        label = "Packs",
-        headline = "Offline content packs",
-        summary = "Installed guide packs are managed locally with license and review metadata.",
-        offlineState = "Pack records are stored locally; no registry, downloads, accounts, or network calls are wired in.",
-        nextSteps = listOf(
-            "Add signature and schema validation before external pack import.",
-            "Keep official, community, and user-imported packs visually distinct.",
-            "Support user-loaded map areas in a later phase.",
         ),
     ),
 }

@@ -1,6 +1,7 @@
 package ai.unplugged.posa.ui
 
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.roundToInt
@@ -55,6 +56,24 @@ internal fun formatDistance(meters: Double): String =
     }
 
 internal fun formatBearing(degrees: Double): String = "${degrees.roundToInt()} deg ${bearingCardinal(degrees)}"
+
+internal fun angularDistanceDegrees(a: Float, b: Float): Float =
+    abs(shortestAngularDeltaDegrees(a, b))
+
+internal fun smoothHeadingDegrees(previous: Float, target: Float, smoothingFactor: Float): Float {
+    require(smoothingFactor in 0f..1f)
+    return normalizeHeadingDegrees(
+        previous + shortestAngularDeltaDegrees(previous, target) * smoothingFactor,
+    )
+}
+
+internal fun normalizeHeadingDegrees(degrees: Float): Float {
+    val normalized = degrees % 360f
+    return if (normalized < 0f) normalized + 360f else normalized
+}
+
+private fun shortestAngularDeltaDegrees(from: Float, to: Float): Float =
+    ((to - from + 540f) % 360f) - 180f
 
 private fun bearingCardinal(degrees: Double): String {
     val directions = listOf("N", "NE", "E", "SE", "S", "SW", "W", "NW")

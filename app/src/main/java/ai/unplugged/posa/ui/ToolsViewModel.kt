@@ -130,7 +130,7 @@ internal class ToolsViewModel(
         }
     }
 
-    fun createChecklistItem(checklistId: String, label: String, details: String?) {
+    fun createChecklistItem(checklistId: String, label: String, details: String?, gearItemId: String?) {
         mutate { localDatabase ->
             val repositories = localDatabase.repositories()
             val now = System.currentTimeMillis()
@@ -146,12 +146,13 @@ internal class ToolsViewModel(
                     position = nextPosition,
                     isChecked = false,
                     updatedAtEpochMillis = now,
+                    gearItemId = gearItemId,
                 ),
             )
         }
     }
 
-    fun updateChecklistItem(item: ChecklistItem, label: String, details: String?, isChecked: Boolean) {
+    fun updateChecklistItem(item: ChecklistItem, label: String, details: String?, isChecked: Boolean, gearItemId: String?) {
         mutate { localDatabase ->
             localDatabase.repositories().checklists.saveItem(
                 item.copy(
@@ -159,6 +160,7 @@ internal class ToolsViewModel(
                     details = details,
                     isChecked = isChecked,
                     updatedAtEpochMillis = System.currentTimeMillis(),
+                    gearItemId = gearItemId,
                 ),
             )
         }
@@ -179,6 +181,8 @@ internal class ToolsViewModel(
                     name = draft.name,
                     category = draft.category,
                     quantity = draft.quantity,
+                    weightKilograms = draft.weightKilograms,
+                    volumeLiters = draft.volumeLiters,
                     condition = draft.condition,
                     notes = draft.notes,
                     isAvailable = draft.isAvailable,
@@ -196,6 +200,8 @@ internal class ToolsViewModel(
                     name = draft.name,
                     category = draft.category,
                     quantity = draft.quantity,
+                    weightKilograms = draft.weightKilograms,
+                    volumeLiters = draft.volumeLiters,
                     condition = draft.condition,
                     notes = draft.notes,
                     isAvailable = draft.isAvailable,

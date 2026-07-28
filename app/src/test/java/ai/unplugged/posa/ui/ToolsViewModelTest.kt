@@ -87,11 +87,11 @@ class ToolsViewModelTest {
 
         // Await the first item before adding the second: position is derived from
         // existing items, so concurrent creates would race (as rapid taps would).
-        viewModel.createChecklistItem(checklist.id, label = "Water", details = null)
+        viewModel.createChecklistItem(checklist.id, label = "Water", details = null, gearItemId = null)
         viewModel.awaitState { s ->
             s.checklists.first { it.checklist.id == checklist.id }.items.size == 1
         }
-        viewModel.createChecklistItem(checklist.id, label = "Map", details = null)
+        viewModel.createChecklistItem(checklist.id, label = "Map", details = null, gearItemId = null)
 
         val items = viewModel.awaitState { s ->
             s.checklists.first { it.checklist.id == checklist.id }.items.size == 2

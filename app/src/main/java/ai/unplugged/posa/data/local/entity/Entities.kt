@@ -89,6 +89,10 @@ data class InstalledMapEntity(
     @ColumnInfo(name = "bounding_box_max_longitude") val boundingBoxMaxLongitude: Double?,
     @ColumnInfo(name = "imported_at_epoch_millis") val importedAtEpochMillis: Long,
     @ColumnInfo(name = "updated_at_epoch_millis") val updatedAtEpochMillis: Long,
+    @ColumnInfo(name = "indexing_status", defaultValue = "'not_indexed'") val legacyIndexingStatus: String,
+    @ColumnInfo(name = "indexed_feature_count", defaultValue = "0") val legacyIndexedFeatureCount: Int,
+    @ColumnInfo(name = "indexed_segment_count", defaultValue = "0") val legacyIndexedSegmentCount: Int,
+    @ColumnInfo(name = "index_error") val legacyIndexError: String?,
 )
 
 @Entity(
@@ -120,6 +124,7 @@ data class ChecklistEntity(
     indices = [
         Index(value = ["checklist_id"]),
         Index(value = ["checklist_id", "position"]),
+        Index(value = ["gear_item_id"]),
     ],
 )
 data class ChecklistItemEntity(
@@ -130,6 +135,7 @@ data class ChecklistItemEntity(
     val position: Int,
     @ColumnInfo(name = "is_checked") val isChecked: Boolean,
     @ColumnInfo(name = "updated_at_epoch_millis") val updatedAtEpochMillis: Long,
+    @ColumnInfo(name = "gear_item_id") val gearItemId: String?,
 )
 
 @Entity(
@@ -145,6 +151,8 @@ data class GearItemEntity(
     val name: String,
     val category: String?,
     val quantity: Int,
+    @ColumnInfo(name = "weight_kilograms") val weightKilograms: Double?,
+    @ColumnInfo(name = "volume_liters") val volumeLiters: Double?,
     val condition: String?,
     val notes: String?,
     @ColumnInfo(name = "is_available") val isAvailable: Boolean,
@@ -189,6 +197,101 @@ data class ProvenanceEntity(
     @ColumnInfo(name = "reviewed_by") val reviewedBy: String?,
     @ColumnInfo(name = "reviewed_at_epoch_millis") val reviewedAtEpochMillis: Long?,
     val notes: String?,
+)
+
+@Entity(
+    tableName = "retrieval_embedding_models",
+    indices = [
+        Index(value = ["is_active"]),
+    ],
+)
+data class RetrievalEmbeddingModelEntity(
+    @PrimaryKey @ColumnInfo(name = "model_id") val modelId: String,
+    @ColumnInfo(name = "display_name") val displayName: String,
+    val dimension: Int,
+    @ColumnInfo(name = "vector_format") val vectorFormat: String,
+    @ColumnInfo(name = "distance_metric") val distanceMetric: String,
+    @ColumnInfo(name = "query_instruction") val queryInstruction: String?,
+    @ColumnInfo(name = "passage_instruction") val passageInstruction: String?,
+    @ColumnInfo(name = "max_input_tokens") val maxInputTokens: Int?,
+    @ColumnInfo(name = "is_active") val isActive: Boolean,
+    @ColumnInfo(name = "created_at_epoch_millis") val createdAtEpochMillis: Long,
+)
+
+@Entity(
+    tableName = "retrieval_documents",
+    indices = [
+        Index(value = ["category"]),
+        Index(value = ["document_type"]),
+        Index(value = ["publisher"]),
+        Index(value = ["content_hash"]),
+        Index(value = ["corpus_version"]),
+    ],
+)
+data class RetrievalDocumentEntity(
+    @PrimaryKey val id: String,
+    val title: String,
+    @ColumnInfo(name = "document_type") val documentType: String,
+    val publisher: String?,
+    val category: String,
+    @ColumnInfo(name = "hazard_tags") val hazardTags: String?,
+    @ColumnInfo(name = "audience_tags") val audienceTags: String?,
+    val urgency: String?,
+    @ColumnInfo(name = "source_url") val sourceUrl: String?,
+    @ColumnInfo(name = "source_citation") val sourceCitation: String?,
+    val license: String?,
+    @ColumnInfo(name = "content_hash") val contentHash: String,
+    @ColumnInfo(name = "corpus_version") val corpusVersion: String,
+    @ColumnInfo(name = "created_at_epoch_millis") val createdAtEpochMillis: Long,
+    @ColumnInfo(name = "updated_at_epoch_millis") val updatedAtEpochMillis: Long,
+)
+
+@Entity(
+    tableName = "retrieval_chunks",
+    foreignKeys = [
+        ForeignKey(
+            entity = RetrievalDocumentEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["document_id"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+        ForeignKey(
+            entity = RetrievalEmbeddingModelEntity::class,
+            parentColumns = ["model_id"],
+            childColumns = ["embedding_model_id"],
+            onDelete = ForeignKey.SET_NULL,
+        ),
+    ],
+    indices = [
+        Index(value = ["document_id"]),
+        Index(value = ["document_id", "chunk_ordinal"], unique = true),
+        Index(value = ["category"]),
+        Index(value = ["urgency"]),
+        Index(value = ["embedding_model_id"]),
+        Index(value = ["content_hash"]),
+    ],
+)
+data class RetrievalChunkEntity(
+    @PrimaryKey val id: String,
+    @ColumnInfo(name = "document_id") val documentId: String,
+    @ColumnInfo(name = "chunk_ordinal") val chunkOrdinal: Int,
+    @ColumnInfo(name = "source_page_start") val sourcePageStart: Int?,
+    @ColumnInfo(name = "source_page_end") val sourcePageEnd: Int?,
+    @ColumnInfo(name = "section_title") val sectionTitle: String?,
+    @ColumnInfo(name = "heading_path") val headingPath: String?,
+    val content: String,
+    @ColumnInfo(name = "token_count") val tokenCount: Int?,
+    val category: String,
+    @ColumnInfo(name = "hazard_tags") val hazardTags: String?,
+    @ColumnInfo(name = "audience_tags") val audienceTags: String?,
+    val urgency: String?,
+    @ColumnInfo(name = "embedding_model_id") val embeddingModelId: String?,
+    @ColumnInfo(name = "embedding_dimension") val embeddingDimension: Int?,
+    @ColumnInfo(name = "embedding_version") val embeddingVersion: String?,
+    @ColumnInfo(name = "embedded_at_epoch_millis") val embeddedAtEpochMillis: Long?,
+    @ColumnInfo(name = "content_hash") val contentHash: String,
+    @ColumnInfo(name = "created_at_epoch_millis") val createdAtEpochMillis: Long,
+    @ColumnInfo(name = "updated_at_epoch_millis") val updatedAtEpochMillis: Long,
 )
 
 @Entity(

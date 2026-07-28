@@ -7,9 +7,9 @@ import org.junit.Test
 
 class PosaDestinationTest {
     @Test
-    fun phaseOneDestinationsMatchRoadmapTabs() {
+    fun destinationsMatchRoadmapTabs() {
         assertEquals(
-            listOf("Map", "Tools", "Guide", "Packs"),
+            listOf("Map", "Ask", "Tools"),
             PosaDestination.entries.map { it.label },
         )
     }

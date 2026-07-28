@@ -25,3 +25,25 @@ local.properties
 # Local test data
 tmp/
 *.map.tmp
+
+# Private local RAG corpus / ingestion artifacts.
+# Keep downloaded PDFs, scraped pages, manifests, OCR/vision triage,
+# ingestion scripts, chunking experiments, and retrieval eval sets out of git.
+rag_source_corpus/
+
+# Generated private RAG asset databases. Build locally from rag_source_corpus.
+app/src/main/assets/rag/*.db
+app/src/main/assets/rag/*.db-*
+app/src/main/assets/rag/*.sqlite
+app/src/main/assets/rag/*.sqlite-*
+
+# Generated/private local embedding model assets.
+app/src/main/assets/embedding/**/*.onnx
+app/src/main/assets/embedding/**/vocab.txt
+app/src/main/assets/embedding/**/tokenizer.json
+app/src/main/assets/embedding/**/tokenizer_config.json
+app/src/main/assets/embedding/**/special_tokens_map.json
+
+# Generated/private local LLM assets.
+app/src/main/assets/llm/**/*.gguf
+app/src/main/assets/llm/**/*.bin

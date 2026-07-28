@@ -20,6 +20,8 @@ import android.net.Uri
 import android.os.Looper
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas as ComposeCanvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -74,6 +76,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Path as ComposePath
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -83,6 +87,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import org.mapsforge.core.graphics.Style
 import org.mapsforge.core.model.LatLong
+import org.mapsforge.core.model.Rotation
 import org.mapsforge.map.android.graphics.AndroidBitmap
 import org.mapsforge.map.android.graphics.AndroidGraphicFactory
 import org.mapsforge.map.android.util.AndroidUtil
@@ -144,6 +149,7 @@ internal fun MapSection(
         uri?.let(actions.onImportMap)
     }
     var toolsSheetOpen by rememberSaveable { mutableStateOf(false) }
+    var headingUpMap by rememberSaveable { mutableStateOf(false) }
     var pendingWaypointCoordinate by remember { mutableStateOf<FieldCoordinate?>(null) }
     var detailWaypointId by remember { mutableStateOf<String?>(null) }
     var editingWaypointId by remember { mutableStateOf<String?>(null) }
@@ -166,6 +172,7 @@ internal fun MapSection(
             breadcrumbTrails = state.breadcrumbTrails,
             currentLocation = currentLocation,
             headingDegrees = headingDegrees,
+            headingUpMap = headingUpMap,
             onMapLongPress = { pendingWaypointCoordinate = it },
             onWaypointTap = { detailWaypointId = it },
             modifier = Modifier.fillMaxSize(),
@@ -182,6 +189,11 @@ internal fun MapSection(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.Top,
         ) {
+            CompassButton(
+                headingDegrees = headingDegrees,
+                headingUpMap = headingUpMap,
+                onClick = { headingUpMap = !headingUpMap },
+            )
             Box(modifier = Modifier.weight(1f)) {
                 if (state.isLoading || state.errorMessage != null) {
                     MapStateBanners(state)
@@ -430,6 +442,99 @@ private fun MapMenuButton(onClick: () -> Unit) {
 }
 
 @Composable
+private fun CompassButton(
+    headingDegrees: Float?,
+    headingUpMap: Boolean,
+    onClick: () -> Unit,
+) {
+    val surfaceColor = if (headingUpMap) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
+    }
+    val contentColor = if (headingUpMap) {
+        MaterialTheme.colorScheme.onPrimary
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
+    Surface(
+        onClick = onClick,
+        shape = CircleShape,
+        color = surfaceColor,
+        contentColor = contentColor,
+        border = BorderStroke(1.dp, contentColor.copy(alpha = 0.22f)),
+        shadowElevation = 4.dp,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .padding(8.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            CompassGlyph(
+                headingDegrees = headingDegrees,
+                headingUpMap = headingUpMap,
+                modifier = Modifier.fillMaxSize(),
+            )
+            Text(
+                text = "N",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+@Composable
+private fun CompassGlyph(
+    headingDegrees: Float?,
+    headingUpMap: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val color = if (headingUpMap) {
+        MaterialTheme.colorScheme.onPrimary
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
+    val needleRotation = if (headingUpMap) 0f else headingDegrees ?: 0f
+    ComposeCanvas(modifier = modifier) {
+        val radius = size.minDimension / 2f
+        val centerX = size.width / 2f
+        val centerY = size.height / 2f
+        drawCircle(
+            color = color.copy(alpha = 0.18f),
+            radius = radius,
+            center = androidx.compose.ui.geometry.Offset(centerX, centerY),
+        )
+        drawCircle(
+            color = color.copy(alpha = 0.72f),
+            radius = radius - 1.5.dp.toPx(),
+            center = androidx.compose.ui.geometry.Offset(centerX, centerY),
+            style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.5.dp.toPx()),
+        )
+        rotate(degrees = needleRotation, pivot = androidx.compose.ui.geometry.Offset(centerX, centerY)) {
+            val northNeedle = ComposePath().apply {
+                moveTo(centerX, centerY - radius + 4.dp.toPx())
+                lineTo(centerX - 5.dp.toPx(), centerY + 2.dp.toPx())
+                lineTo(centerX, centerY - 1.dp.toPx())
+                lineTo(centerX + 5.dp.toPx(), centerY + 2.dp.toPx())
+                close()
+            }
+            val southNeedle = ComposePath().apply {
+                moveTo(centerX, centerY + radius - 4.dp.toPx())
+                lineTo(centerX - 4.dp.toPx(), centerY + 3.dp.toPx())
+                lineTo(centerX, centerY + 6.dp.toPx())
+                lineTo(centerX + 4.dp.toPx(), centerY + 3.dp.toPx())
+                close()
+            }
+            drawPath(northNeedle, color)
+            drawPath(southNeedle, color.copy(alpha = 0.38f))
+        }
+    }
+}
+
+@Composable
 private fun MapsforgeMapSurface(
     activeInstalledMap: InstalledMap?,
     waypoints: List<Waypoint>,
@@ -437,6 +542,7 @@ private fun MapsforgeMapSurface(
     breadcrumbTrails: List<BreadcrumbTrailSummary>,
     currentLocation: FieldCoordinate?,
     headingDegrees: Float?,
+    headingUpMap: Boolean,
     onMapLongPress: (FieldCoordinate) -> Unit,
     onWaypointTap: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -450,6 +556,7 @@ private fun MapsforgeMapSurface(
     var mapFile by remember { mutableStateOf<File?>(null) }
     var mapError by remember { mutableStateOf<String?>(null) }
     var appliedViewportKey by remember { mutableStateOf<String?>(null) }
+    val mapRotationController = remember { HeadingUpMapRotationController() }
     // Re-armed each time this surface is (re)composed — i.e. every time the Map tab is
     // re-entered — so returning to the map recenters on the current location once,
     // without fighting the user's panning or re-centering on every GPS update.
@@ -487,6 +594,7 @@ private fun MapsforgeMapSurface(
     LaunchedEffect(context, activeInstalledMap?.id, activeInstalledMap?.filePath) {
         try {
             appliedViewportKey = null
+            mapRotationController.reset()
             val installedFile = activeInstalledMap?.let { File(it.filePath) }
             if (installedFile == null) {
                 mapFile = copyAssetToCache(context, MAP_ASSET_PATH)
@@ -584,6 +692,7 @@ private fun MapsforgeMapSurface(
                                 breadcrumbOverlay.reset()
                                 waypointOverlay.reset()
                                 locationOverlay.reset()
+                                mapRotationController.reset()
                             }
                         },
                         update = { mapView ->
@@ -596,24 +705,16 @@ private fun MapsforgeMapSurface(
                             waypointOverlay.update(mapView, waypoints, selectedWaypointId, density) {
                                 currentOnWaypointTap(it)
                             }
-                            locationOverlay.update(mapView, currentLocation, headingDegrees, density)
+                            val markerHeading = if (headingUpMap) 0f else headingDegrees
+                            locationOverlay.update(mapView, currentLocation, markerHeading, density)
+                            mapRotationController.update(
+                                mapView = mapView,
+                                headingUpMap = headingUpMap,
+                                headingDegrees = headingDegrees,
+                            )
                         },
                     )
                 }
-            }
-            Surface(
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(8.dp),
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.88f),
-                contentColor = MaterialTheme.colorScheme.onSurface,
-                shape = RoundedCornerShape(6.dp),
-            ) {
-                Text(
-                    text = "Map data (c) OpenStreetMap contributors. Rendered with Mapsforge.",
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                    style = MaterialTheme.typography.labelSmall,
-                )
             }
             if (currentLocation != null) {
                 Surface(
@@ -638,6 +739,51 @@ private fun MapsforgeMapSurface(
                 }
             }
         }
+    }
+}
+
+private class HeadingUpMapRotationController {
+    private var appliedDegrees: Float? = null
+    private var lastAppliedAtNanos: Long = 0L
+
+    fun reset() {
+        appliedDegrees = null
+        lastAppliedAtNanos = 0L
+    }
+
+    fun update(
+        mapView: MapView,
+        headingUpMap: Boolean,
+        headingDegrees: Float?,
+        nowNanos: Long = System.nanoTime(),
+    ) {
+        if (mapView.width <= 0 || mapView.height <= 0) return
+
+        val targetDegrees = if (headingUpMap && headingDegrees != null) {
+            normalizeHeadingDegrees(-headingDegrees)
+        } else {
+            0f
+        }
+        val currentDegrees = appliedDegrees
+            ?: normalizeHeadingDegrees(mapView.getMapRotation().degrees)
+        val threshold = if (headingUpMap) MAP_ROTATION_UPDATE_THRESHOLD_DEGREES else 0.5f
+        if (angularDistanceDegrees(currentDegrees, targetDegrees) < threshold) return
+        if (headingUpMap &&
+            lastAppliedAtNanos != 0L &&
+            nowNanos - lastAppliedAtNanos < MAP_ROTATION_MIN_INTERVAL_NANOS
+        ) {
+            return
+        }
+
+        mapView.rotate(
+            Rotation(
+                targetDegrees,
+                mapView.width / 2f,
+                mapView.height / 2f,
+            ),
+        )
+        appliedDegrees = targetDegrees
+        lastAppliedAtNanos = nowNanos
     }
 }
 
@@ -1175,17 +1321,31 @@ private fun rememberDeviceHeading(enabled: Boolean): Float? {
 
         val rotationMatrix = FloatArray(9)
         val orientation = FloatArray(3)
+        var filteredHeading: Float? = null
+        var publishedHeading: Float? = null
+        var lastPublishedAtNanos = 0L
         val listener = object : SensorEventListener {
             override fun onSensorChanged(event: SensorEvent) {
                 SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values)
                 SensorManager.getOrientation(rotationMatrix, orientation)
-                var degrees = Math.toDegrees(orientation[0].toDouble()).toFloat()
-                if (degrees < 0f) degrees += 360f
-                val previous = heading
-                if (previous == null ||
-                    angularDistanceDegrees(previous, degrees) >= HEADING_UPDATE_THRESHOLD_DEGREES
-                ) {
-                    heading = degrees
+                val rawHeading = normalizeHeadingDegrees(
+                    Math.toDegrees(orientation[0].toDouble()).toFloat(),
+                )
+                val filtered = filteredHeading?.let { previous ->
+                    smoothHeadingDegrees(previous, rawHeading, HEADING_SMOOTHING_FACTOR)
+                } ?: rawHeading
+                filteredHeading = filtered
+
+                val eventNanos = event.timestamp.takeIf { it > 0L } ?: System.nanoTime()
+                val enoughTimeElapsed = lastPublishedAtNanos == 0L ||
+                    eventNanos - lastPublishedAtNanos >= HEADING_PUBLISH_INTERVAL_NANOS
+                val enoughMovement = publishedHeading?.let { previous ->
+                    angularDistanceDegrees(previous, filtered) >= HEADING_UPDATE_THRESHOLD_DEGREES
+                } ?: true
+                if (enoughTimeElapsed && enoughMovement) {
+                    publishedHeading = filtered
+                    lastPublishedAtNanos = eventNanos
+                    heading = filtered
                 }
             }
 
@@ -1197,11 +1357,6 @@ private fun rememberDeviceHeading(enabled: Boolean): Float? {
     }
 
     return heading
-}
-
-private fun angularDistanceDegrees(a: Float, b: Float): Float {
-    val diff = kotlin.math.abs(a - b) % 360f
-    return if (diff > 180f) 360f - diff else diff
 }
 
 /**
@@ -1636,7 +1791,11 @@ private const val MAX_MAP_ZOOM = 22
 private const val DEFAULT_MAP_ZOOM = 14
 private const val DEFAULT_INSTALLED_MAP_ZOOM = 12
 
-private const val HEADING_UPDATE_THRESHOLD_DEGREES = 2f
+private const val HEADING_SMOOTHING_FACTOR = 0.32f
+private const val HEADING_UPDATE_THRESHOLD_DEGREES = 1.5f
+private const val HEADING_PUBLISH_INTERVAL_NANOS = 50_000_000L
+private const val MAP_ROTATION_UPDATE_THRESHOLD_DEGREES = 2.5f
+private const val MAP_ROTATION_MIN_INTERVAL_NANOS = 50_000_000L
 private val LOCATION_DOT_COLOR = 0xFF1A73E8.toInt()
 private val HEADING_CONE_COLOR = 0x552A6FF0.toInt()
 private val ACCURACY_FILL_COLOR = 0x221A73E8.toInt()

@@ -4,23 +4,15 @@ import ai.unplugged.posa.data.local.PosaDatabase
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.Build
-import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.Map
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -37,7 +29,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -55,13 +46,13 @@ fun PosaApp(database: PosaDatabase? = null) {
         factory = ToolsViewModel.factory(database),
     )
 
-    // Tools content reflects guide cards and waypoints owned by the other VMs, so
-    // both wire a reload seam to refresh tools after their mutations/install.
+    // Tools content reflects waypoints owned by the map VM, so the map reload seam
+    // keeps tools fresh after waypoint mutations.
     val mapViewModel: MapViewModel = viewModel(
         factory = MapViewModel.factory(database) { toolsViewModel.reload() },
     )
-    val guideViewModel: GuideViewModel = viewModel(
-        factory = GuideViewModel.factory(database) { toolsViewModel.reload() },
+    val askViewModel: AskViewModel = viewModel(
+        factory = AskViewModel.factory(),
     )
 
     PosaTheme {
@@ -94,7 +85,7 @@ fun PosaApp(database: PosaDatabase? = null) {
             DestinationScreen(
                 destination = selectedDestination,
                 contentPadding = innerPadding,
-                guideViewModel = guideViewModel,
+                askViewModel = askViewModel,
                 toolsViewModel = toolsViewModel,
                 mapViewModel = mapViewModel,
             )
@@ -132,7 +123,7 @@ private fun PosaTopBar() {
 private fun DestinationScreen(
     destination: PosaDestination,
     contentPadding: PaddingValues,
-    guideViewModel: GuideViewModel,
+    askViewModel: AskViewModel,
     toolsViewModel: ToolsViewModel,
     mapViewModel: MapViewModel,
 ) {
@@ -157,15 +148,7 @@ private fun DestinationScreen(
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
             when (destination) {
-                PosaDestination.Guide -> GuideDestination(
-                    guideViewModel = guideViewModel,
-                    toolsViewModel = toolsViewModel,
-                    mapViewModel = mapViewModel,
-                )
-                PosaDestination.Packs -> {
-                    val guideContentState by guideViewModel.state.collectAsState()
-                    PacksSection(guideContentState)
-                }
+                PosaDestination.Ask -> AskDestination(askViewModel)
                 PosaDestination.Tools -> ToolsDestination(toolsViewModel)
                 PosaDestination.Map -> Unit // handled full-screen above
             }
@@ -174,43 +157,12 @@ private fun DestinationScreen(
 }
 
 @Composable
-private fun GuideDestination(
-    guideViewModel: GuideViewModel,
-    toolsViewModel: ToolsViewModel,
-    mapViewModel: MapViewModel,
-) {
-    // The Guide tab aggregates all three domains: workflows and answers are derived
-    // from guide + tools + map state together.
-    val guideContentState by guideViewModel.state.collectAsState()
-    val toolsContentState by toolsViewModel.state.collectAsState()
-    val mapContentState by mapViewModel.state.collectAsState()
-    val guidedQuestionQuery by guideViewModel.guidedQuestionQuery.collectAsState()
-    val guideSearchQuery by guideViewModel.guideSearchQuery.collectAsState()
-    val selectedGuideCardId by guideViewModel.selectedGuideCardId.collectAsState()
-    val selectedWorkflowId by guideViewModel.selectedWorkflowId.collectAsState()
-
-    GuideSection(
-        state = guideContentState,
-        workflows = buildGuidedWorkflows(
-            guideState = guideContentState,
-            toolsState = toolsContentState,
-            mapState = mapContentState,
-        ),
-        questionResult = answerGuidedQuestion(
-            guideState = guideContentState,
-            toolsState = toolsContentState,
-            mapState = mapContentState,
-            question = guidedQuestionQuery,
-        ),
-        question = guidedQuestionQuery,
-        query = guideSearchQuery,
-        selectedCardId = selectedGuideCardId,
-        selectedWorkflowId = selectedWorkflowId,
-        onQuestionChange = guideViewModel::setGuidedQuestion,
-        onQueryChange = guideViewModel::setGuideSearch,
-        onSelectCard = guideViewModel::selectCard,
-        onSelectWorkflow = guideViewModel::selectWorkflow,
-        onBackToList = guideViewModel::clearSelectedCard,
+private fun AskDestination(askViewModel: AskViewModel) {
+    val askContentState by askViewModel.state.collectAsState()
+    AskSection(
+        state = askContentState,
+        onQuestionChange = askViewModel::setQuestion,
+        onSearch = askViewModel::search,
     )
 }
 
@@ -259,46 +211,11 @@ private fun MapDestination(mapViewModel: MapViewModel, contentPadding: PaddingVa
     )
 }
 
-@Composable
-private fun NextSteps(items: List<String>) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(
-            text = "Reserved for upcoming phases",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-        )
-        HorizontalDivider()
-        items.forEach { item ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.Top,
-            ) {
-                Surface(
-                    modifier = Modifier
-                        .padding(top = 6.dp)
-                        .size(8.dp),
-                    color = MaterialTheme.colorScheme.tertiary,
-                    shape = RoundedCornerShape(4.dp),
-                    content = {},
-                )
-                Text(
-                    text = item,
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.weight(1f),
-                )
-            }
-        }
-        Spacer(modifier = Modifier.height(2.dp))
-    }
-}
-
 private val PosaDestination.icon: ImageVector
     get() = when (this) {
         PosaDestination.Map -> Icons.Outlined.Map
+        PosaDestination.Ask -> Icons.Outlined.Search
         PosaDestination.Tools -> Icons.Outlined.Build
-        PosaDestination.Guide -> Icons.AutoMirrored.Outlined.MenuBook
-        PosaDestination.Packs -> Icons.Outlined.Inventory2
     }
 
 internal fun newLocalId(prefix: String): String = "$prefix-${UUID.randomUUID()}"

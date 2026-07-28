@@ -24,4 +24,11 @@ class MapMathTest {
         assertEquals("1.50 km", formatDistance(1500.0))
         assertEquals("225 deg SW", formatBearing(225.0))
     }
+
+    @Test
+    fun headingSmoothingTakesTheShortestPathAcrossNorth() {
+        assertEquals(358f, smoothHeadingDegrees(350f, 10f, 0.4f), 0.001f)
+        assertEquals(2f, smoothHeadingDegrees(10f, 350f, 0.4f), 0.001f)
+        assertEquals(2f, angularDistanceDegrees(359f, 1f), 0.001f)
+    }
 }
